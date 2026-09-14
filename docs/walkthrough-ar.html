@@ -1,0 +1,854 @@
+<title>Search Pulse — شرح المشروع</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Arabic:wght@400;500;600&family=Readex+Pro:wght@500;600;700&display=swap">
+
+<style>
+/* ---------------------------------------------------------------------------
+   Search Pulse — شرح المشروع (عربي)
+
+   الهوية اللونية مأخوذة من المنتج نفسه: أخضر سليم، أصفر انتباه، أحمر خطر.
+   ورقة فاتحة للقراءة الطويلة، وثيم داكن كامل.
+   --------------------------------------------------------------------------- */
+
+:root {
+  --paper:      #f5f8f6;
+  --surface:    #ffffff;
+  --sunken:     #eaefec;
+  --line:       #d5ded8;
+  --line-soft:  #e4eae6;
+  --ink:        #0f1512;
+  --ink-soft:   #4d5a54;
+  --ink-faint:  #77857e;
+
+  --green:      #00784f;
+  --green-soft: #e0f3ea;
+  --amber:      #8a5a00;
+  --amber-soft: #fbf0d9;
+  --red:        #b4283a;
+  --red-soft:   #fbe6e9;
+  --blue:       #1a5498;
+  --blue-soft:  #e6eefa;
+
+  --display: "Readex Pro", "IBM Plex Sans Arabic", "Segoe UI", Tahoma, sans-serif;
+  --body:    "IBM Plex Sans Arabic", "Segoe UI", Tahoma, sans-serif;
+  --mono:    "IBM Plex Mono", ui-monospace, Consolas, monospace;
+
+  --measure: 68ch;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper:      #08090a;
+    --surface:    #101316;
+    --sunken:     #171b1f;
+    --line:       #272d33;
+    --line-soft:  #1d2227;
+    --ink:        #eef2f0;
+    --ink-soft:   #a3afab;
+    --ink-faint:  #7d8a86;
+
+    --green:      #2fd694;
+    --green-soft: #0a2a1e;
+    --amber:      #f3bc4a;
+    --amber-soft: #2a2109;
+    --red:        #ff6b79;
+    --red-soft:   #2c1015;
+    --blue:       #6fb4ff;
+    --blue-soft:  #0b2138;
+  }
+}
+
+:root[data-theme="dark"] {
+  --paper:      #08090a;
+  --surface:    #101316;
+  --sunken:     #171b1f;
+  --line:       #272d33;
+  --line-soft:  #1d2227;
+  --ink:        #eef2f0;
+  --ink-soft:   #a3afab;
+  --ink-faint:  #7d8a86;
+
+  --green:      #2fd694;
+  --green-soft: #0a2a1e;
+  --amber:      #f3bc4a;
+  --amber-soft: #2a2109;
+  --red:        #ff6b79;
+  --red-soft:   #2c1015;
+  --blue:       #6fb4ff;
+  --blue-soft:  #0b2138;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  direction: rtl;
+  font-family: var(--body);
+  font-size: 16px;
+  line-height: 1.75;
+  margin: 0;
+  -webkit-font-smoothing: antialiased;
+}
+
+.page { margin: 0 auto; max-width: 1180px; padding-block: 0 5rem; padding-inline: 20px; }
+
+/* ---- Typography ---------------------------------------------------------- */
+
+h1, h2, h3, h4 { font-family: var(--display); line-height: 1.3; margin: 0; text-wrap: balance; }
+h1 { font-size: clamp(1.9rem, 4.5vw, 2.8rem); font-weight: 700; letter-spacing: -0.01em; }
+h2 { font-size: clamp(1.35rem, 3vw, 1.7rem); font-weight: 600; }
+h3 { font-size: 1.12rem; font-weight: 600; }
+h4 { font-size: 0.98rem; font-weight: 600; }
+
+p { margin: 0; max-width: var(--measure); }
+strong { font-weight: 600; }
+
+a { color: var(--green); text-underline-offset: 3px; }
+a:focus-visible, button:focus-visible { outline: 2px solid var(--green); outline-offset: 3px; border-radius: 3px; }
+
+code, .mono, kbd { direction: ltr; font-family: var(--mono); font-size: 0.86em; unicode-bidi: isolate; }
+code { background: var(--sunken); border-radius: 4px; padding: 0.1em 0.38em; }
+.en { direction: ltr; unicode-bidi: isolate; }
+
+.lede { color: var(--ink-soft); font-size: 1.08rem; max-width: 62ch; }
+
+.eyebrow {
+  color: var(--green);
+  font-family: var(--display);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.muted { color: var(--ink-soft); }
+.tiny  { font-size: 0.86rem; }
+
+/* ---- Masthead ------------------------------------------------------------ */
+
+.masthead { border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 1.1rem; padding-block: 3rem 2.5rem; }
+.masthead-top { align-items: baseline; display: flex; flex-wrap: wrap; gap: 0.75rem 1.25rem; justify-content: space-between; }
+
+.theme-toggle {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--ink-soft);
+  cursor: pointer;
+  font-family: var(--body);
+  font-size: 0.82rem;
+  padding: 0.3rem 0.85rem;
+}
+.theme-toggle:hover { color: var(--ink); }
+
+.facts {
+  border-top: 1px solid var(--line-soft);
+  display: grid;
+  gap: 1.5rem 2rem;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  margin: 0;
+  padding-top: 1.5rem;
+}
+.facts div { display: flex; flex-direction: column; gap: 0.15rem; }
+.facts dt { color: var(--ink-faint); font-size: 0.76rem; letter-spacing: 0.04em; }
+/* الأرقام تعمل باتجاه لاتيني حتى لا تعيد خوارزمية bidi ترتيب "828 MB". */
+.facts dd {
+  direction: ltr;
+  font-family: var(--display);
+  font-size: 1.55rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  margin: 0;
+  text-align: right;
+  unicode-bidi: isolate;
+}
+
+/* ---- Shell --------------------------------------------------------------- */
+
+.shell { display: grid; gap: 3rem; grid-template-columns: 1fr; }
+@media (min-width: 950px) {
+  .shell { grid-template-columns: 210px 1fr; gap: 3.5rem; }
+  .toc { position: sticky; top: 2rem; align-self: start; }
+}
+
+.toc { padding-top: 2.5rem; }
+.toc h2 { color: var(--ink-faint); font-size: 0.72rem; letter-spacing: 0.12em; margin-bottom: 0.9rem; text-transform: uppercase; }
+.toc ol { display: flex; flex-direction: column; gap: 0.45rem; list-style: none; margin: 0; padding: 0; }
+.toc a { color: var(--ink-soft); display: block; font-size: 0.89rem; text-decoration: none; }
+.toc a:hover { color: var(--green); }
+.toc .toc-num { color: var(--ink-faint); font-family: var(--mono); font-size: 0.76rem; margin-inline-end: 0.45rem; }
+
+.sections { display: flex; flex-direction: column; gap: 3.5rem; min-width: 0; padding-top: 2.5rem; }
+section { display: flex; flex-direction: column; gap: 1.25rem; scroll-margin-top: 1.5rem; }
+
+.sec-head { border-bottom: 2px solid var(--ink); display: flex; flex-direction: column; gap: 0.3rem; padding-bottom: 0.7rem; }
+.sec-head .n { color: var(--green); font-family: var(--mono); font-size: 0.8rem; font-weight: 500; }
+
+.block { display: flex; flex-direction: column; gap: 0.85rem; }
+
+ul.plain, ol.plain { display: flex; flex-direction: column; gap: 0.5rem; margin: 0; padding-inline-start: 1.3rem; max-width: var(--measure); }
+ul.plain li::marker { color: var(--green); }
+ol.plain li::marker { color: var(--ink-faint); font-family: var(--mono); font-size: 0.85em; }
+
+/* ---- Tables -------------------------------------------------------------- */
+
+.scroll { overflow-x: auto; }
+table { border-collapse: collapse; font-size: 0.9rem; min-width: 100%; width: 100%; }
+th, td { border-bottom: 1px solid var(--line-soft); padding: 0.6rem 0.75rem; text-align: start; vertical-align: top; }
+th { border-bottom: 1px solid var(--line); color: var(--ink-faint); font-size: 0.74rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; white-space: nowrap; }
+td.num { font-variant-numeric: tabular-nums; text-align: end; white-space: nowrap; }
+tbody tr:last-child td { border-bottom: none; }
+
+/* ---- Callouts ------------------------------------------------------------ */
+
+.note {
+  border-inline-start: 3px solid var(--ink-faint);
+  border-radius: 0 8px 8px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  max-width: var(--measure);
+  padding: 0.9rem 1.1rem;
+}
+.note h4 { font-size: 0.82rem; letter-spacing: 0.04em; text-transform: uppercase; }
+.note p { font-size: 0.93rem; }
+.note.good { background: var(--green-soft); border-color: var(--green); }
+.note.good h4 { color: var(--green); }
+.note.care { background: var(--amber-soft); border-color: var(--amber); }
+.note.care h4 { color: var(--amber); }
+.note.trap { background: var(--red-soft); border-color: var(--red); }
+.note.trap h4 { color: var(--red); }
+
+/* ---- Pipeline ------------------------------------------------------------ */
+
+.pipeline { display: flex; flex-wrap: wrap; gap: 0.5rem; list-style: none; margin: 0; padding: 0; }
+.pipeline li { align-items: center; display: flex; gap: 0.5rem; }
+.pipeline .stage { background: var(--surface); border: 1px solid var(--line); border-radius: 7px; display: flex; flex-direction: column; gap: 0.1rem; padding: 0.5rem 0.75rem; }
+.pipeline .stage b { font-family: var(--mono); font-size: 0.82rem; font-weight: 500; }
+.pipeline .stage span { color: var(--ink-faint); font-size: 0.74rem; }
+.pipeline .arrow { color: var(--ink-faint); font-size: 0.9rem; }
+.pipeline li:last-child .arrow { display: none; }
+
+/* ---- Cards --------------------------------------------------------------- */
+
+.grid-2 { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; display: flex; flex-direction: column; gap: 0.5rem; padding: 1.1rem 1.2rem; }
+.card h4 { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0.5rem; }
+.card h4 .tag { background: var(--sunken); border-radius: 4px; color: var(--ink-faint); font-family: var(--mono); font-size: 0.68rem; font-weight: 500; padding: 0.1rem 0.35rem; }
+.card p { font-size: 0.92rem; }
+.card .where { border-top: 1px solid var(--line-soft); color: var(--ink-faint); font-size: 0.78rem; margin-top: auto; padding-top: 0.6rem; }
+
+/* ---- Findings ------------------------------------------------------------ */
+
+.finding { border-inline-start: 3px solid var(--line); display: flex; flex-direction: column; gap: 0.35rem; padding-inline-start: 1rem; }
+.finding.sev-high { border-color: var(--red); }
+.finding.sev-mid { border-color: var(--amber); }
+.finding .q { font-family: var(--mono); font-size: 0.95rem; }
+.finding p { font-size: 0.93rem; }
+
+/* ---- Code ---------------------------------------------------------------- */
+
+pre { background: var(--sunken); border: 1px solid var(--line-soft); border-radius: 8px; direction: ltr; margin: 0; overflow-x: auto; padding: 0.9rem 1rem; text-align: left; }
+pre code { background: none; font-size: 0.84rem; line-height: 1.8; padding: 0; }
+pre .c { color: var(--ink-faint); }
+
+footer { border-top: 1px solid var(--line); color: var(--ink-faint); font-size: 0.85rem; margin-top: 4rem; padding-top: 1.5rem; }
+
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+
+/* ---- Print / PDF --------------------------------------------------------- */
+
+@page { size: A4; margin: 14mm 15mm 16mm; }
+
+@media print {
+  :root, :root[data-theme="dark"] {
+    --paper: #ffffff; --surface: #ffffff; --sunken: #f2f5f3;
+    --line: #c4cec8; --line-soft: #dde4e0;
+    --ink: #0b100d; --ink-soft: #3f4b45; --ink-faint: #6b7873;
+    --green: #006643; --green-soft: #e6f4ed;
+    --amber: #7a5000; --amber-soft: #fcf3e2;
+    --red: #a32130; --red-soft: #fce9ec;
+    --blue: #16497f; --blue-soft: #e9f0fa;
+  }
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+  body { font-size: 10.5pt; line-height: 1.6; }
+  .page { max-width: none; padding: 0; }
+  #theme-toggle { display: none; }
+
+  .masthead { padding-block: 0 1.2rem; }
+  h1 { font-size: 22pt; } h2 { font-size: 15pt; } h3 { font-size: 11.5pt; }
+  .facts { grid-template-columns: repeat(5, 1fr); gap: 1rem; }
+  .facts dd { font-size: 15pt; }
+
+  .shell { display: block; }
+  .toc { border-bottom: 1px solid var(--line); padding-block: 0 1.2rem; position: static; }
+  .toc ol { flex-direction: row; flex-wrap: wrap; gap: 0.35rem 1.6rem; }
+
+  .sections { gap: 2rem; padding-top: 0; }
+  section { gap: 0.9rem; }
+  .sec-head { break-after: avoid; break-inside: avoid; }
+  .card, .note, .finding, .pipeline li, pre, tr { break-inside: avoid; }
+  h2, h3, h4 { break-after: avoid; }
+
+  .grid-2 { gap: 0.7rem; grid-template-columns: 1fr 1fr; }
+  .card { padding: 0.8rem 0.9rem; }
+  .scroll, pre { overflow: visible; }
+  table { font-size: 9pt; }
+  th, td { padding: 0.4rem 0.5rem; }
+  pre code { font-size: 8.5pt; line-height: 1.65; }
+  a { color: var(--ink); text-decoration: none; }
+  footer { margin-top: 2rem; }
+}
+</style>
+
+<div class="page" lang="ar" dir="rtl">
+
+  <header class="masthead">
+    <div class="masthead-top">
+      <p class="eyebrow">شرح المشروع</p>
+      <button class="theme-toggle" id="theme-toggle" type="button">تبديل الثيم</button>
+    </div>
+    <h1>Search&nbsp;Pulse</h1>
+    <p class="lede">
+      نظام يقرأ سجلّ بحث متجر بقالة إلكتروني مع كتالوج المنتجات، ويقول بالظبط فين البحث
+      بيخذل الزبون — وبعدين يقترح الإصلاح من غير ما يطبّقه أبداً. المستند ده بيشرح الفكرة،
+      والبيانات اللي وصلتني، والشغل اللي عملته عليها.
+    </p>
+
+    <dl class="facts">
+      <div><dt>حجم الداتا الأصلية</dt><dd>828 MB</dd></div>
+      <div><dt>منتجات مفهرسة</dt><dd>25,881</dd></div>
+      <div><dt>عمليات بحث</dt><dd>66</dd></div>
+      <div><dt>أسماء بلغتين</dt><dd>51,762</dd></div>
+      <div><dt>اختبارات ناجحة</dt><dd>289</dd></div>
+    </dl>
+  </header>
+
+  <div class="shell">
+
+    <nav class="toc" aria-label="محتويات">
+      <h2>المحتويات</h2>
+      <ol>
+        <li><a href="#concept"><span class="toc-num">01</span>الفكرة</a></li>
+        <li><a href="#data"><span class="toc-num">02</span>البيانات</a></li>
+        <li><a href="#workflow"><span class="toc-num">03</span>سير العمل</a></li>
+        <li><a href="#stack"><span class="toc-num">04</span>التقنيات</a></li>
+        <li><a href="#results"><span class="toc-num">05</span>النتائج</a></li>
+        </ol>
+    </nav>
+
+    <main class="sections">
+
+      <!-- ================= 1. CONCEPT ================= -->
+      <section id="concept">
+        <div class="sec-head"><span class="n">01</span><h2>الفكرة</h2></div>
+
+        <div class="block">
+          <h3>المشكلة، في زبون واحد</h3>
+          <p>
+            زبون في متجر بقالة مصري كتب <strong>«حليبن»</strong> — كلمة حليب بحرف زيادة بالغلط.
+            البحث رجّعله: أكياس شاي، كوردن بلو، وبرجر بيف. المتجر عنده
+            <strong>322 منتج لبن</strong> على الرفّ. ولا واحد فيهم رجع.
+          </p>
+          <p>
+            الزبون مشي. وولا حد في الشركة عرف إن ده حصل. ودي المشكلة اللي المشروع بيحلّها:
+            <strong>المتجر مايقدرش يصلّح فشل هو أصلاً مش شايفه.</strong>
+          </p>
+        </div>
+
+        <div class="block">
+          <h3>النظام بيعمل إيه</h3>
+          <p>تلات حاجات، وكل واحدة مبنية على اللي قبلها.</p>
+          <div class="grid-2">
+            <div class="card">
+              <h4>بيكشف الفشل <span class="tag">داشبورد</span></h4>
+              <p>
+                كل استعلام بياخد درجة ويترتّب بالـ<em>تأثير</em> — الخطورة مرجّحة بنصيبه من الترافيك —
+                ومعاه تشخيص بلغة مفهومة. مش حيطة أرقام حد لسه هيفسّرها.
+              </p>
+              <p>
+                والاستعلامات اللي رجعت فاضية واللي تفاعلها ضعيف، كل نوع ليه عمود قابل للترتيب وفلتر
+                خاص بيه، فتقدر تعزل أي نوع فيهم مباشرة. ولمّا فلتر النتائج الفاضية مايرجّعش حاجة،
+                الجدول بيقول <em>ليه</em> — لأن ده على المحرّك ده نتيجة، مش غياب.
+              </p>
+            </div>
+            <div class="card">
+              <h4>بيقترح الإصلاح <span class="tag">اكتشاف</span></h4>
+              <p>
+                مترادفات وأخطاء إملائية مستخرجة من السجلّ ومن الكتالوج ثنائي اللغة، كل واحدة ومعاها
+                دليلها، مصفوفة في طابور عشان بنيّ آدمي يوافق أو يرفض.
+                <strong>مفيش حاجة بتوصل البحث الحيّ لوحدها.</strong>
+              </p>
+            </div>
+            <div class="card">
+              <h4>بيجاوب على الأسئلة <span class="tag">وكيل</span></h4>
+              <p>
+                وكيل بلغة طبيعية مربوط بتمن أدوات تحليلية، وملخّص أسبوعي بيقول إيه اللي اتغيّر
+                وإيه المحتاج انتباه. وكل إجابة بترجع ومعاها الأدوات اللي استدعتها بالظبط.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div class="note good">
+          <h4>المبدأ التصميمي اللي شكّل كل حاجة</h4>
+          <p>
+            <strong>الاكتشاف آلي، التطبيق لأ.</strong> قاعدة مترادفات غلط بتفسد البحث لكل الزبائن،
+            مش لواحد. فالنظام بيقترح بدرجة ثقة ومعاها الدليل، وآدمي بيقرّر. والموافقة بتضيف القاعدة
+            لملف تصدير بس — ونشر الملف ده يفضل خطوة بشرية منفصلة ومقصودة.
+          </p>
+        </div>
+      </section>
+
+      <!-- ================= 2. DATA ================= -->
+      <section id="data">
+        <div class="sec-head"><span class="n">02</span><h2>البيانات اللي وصلتني</h2></div>
+
+        <div class="block">
+          <p>
+            ملف واحد: <code>spinneys_database.sql</code> — حجمه <strong>828 ميجابايت</strong>،
+            وهو <span class="en">mysqldump</span> كامل لقاعدة بيانات الإنتاج بتاعة متجر بقالة
+            مصري. فيه <strong>30 جدول</strong>. سبعة منهم بس فيهم إشارة عن جودة البحث؛ والـ 23
+            الباقيين — <span class="en">embeddings</span>، مخزون، تاريخ أسعار، جداول
+            <span class="en">Django</span> الداخلية — بيمثّلوا تقريباً
+            <strong>98% من حجم الملف وصفر إشارة</strong>.
+          </p>
+        </div>
+
+        <div class="block">
+          <h3>الجداول السبعة اللي استخدمتها</h3>
+          <div class="scroll">
+            <table>
+              <thead><tr><th>الجدول</th><th>بيحتوي على</th><th class="num">صفوف محمّلة</th></tr></thead>
+              <tbody>
+                <tr><td><code>recommendations_searches</code></td><td>سجلّ البحث — الاستعلام، أسماء المنتجات اللي رجعت بالعربي والإنجليزي، عددها، والتوقيت</td><td class="num">66</td></tr>
+                <tr><td><code>recommendations_querycount</code></td><td>عدّاد تراكمي لكل استعلام، بيغطي ترافيك أقدم من السجلّ المحفوظ</td><td class="num">16</td></tr>
+                <tr><td><code>catalog_product</code></td><td>المنتجات — الكود، الرابط، السعر الافتراضي</td><td class="num">25,881</td></tr>
+                <tr><td><code>catalog_productname</code></td><td>اسم كل منتج بالعربي وبالإنجليزي (صفّين لكل منتج)</td><td class="num">51,762</td></tr>
+                <tr><td><code>catalog_category</code></td><td>شجرة التصنيفات مع الأب لكل تصنيف</td><td class="num">272</td></tr>
+                <tr><td><code>catalog_categoryname</code></td><td>اسم كل تصنيف باللغتين</td><td class="num">544</td></tr>
+                <tr><td><code>catalog_product_categories</code></td><td>ربط المنتج بتصنيفاته (علاقة كثير-لكثير)</td><td class="num">50,309</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="block">
+          <h3>شكل جدول البحث</h3>
+          <p>ده أهم جدول في المشروع، وده تعريفه الحقيقي من الـ <span class="en">dump</span>:</p>
+          <pre><code>CREATE TABLE `recommendations_searches` (
+  `id`          bigint       NOT NULL AUTO_INCREMENT,
+  `query`       varchar(255) NOT NULL,   <span class="c">-- اللي الزبون كتبه</span>
+  `ar_results`  longtext     NOT NULL,   <span class="c">-- أسماء المنتجات، مفصولة بأسطر</span>
+  `en_results`  longtext     NOT NULL,
+  `num_results` int unsigned NOT NULL,
+  `created_at`  datetime(6)  NOT NULL
+)</code></pre>
+          <p>
+            خلّي بالك من اللي <em>مش</em> موجود: النتائج متخزّنة <strong>كنصّ</strong>، مش كمفاتيح
+            للمنتجات. السجلّ بيقول «رجعت المنتج اللي اسمه كذا» مش «رجعت المنتج رقم 123». فكل تحليل
+            بعد كده لازم يشتغل من الأسماء.
+          </p>
+        </div>
+
+        <div class="block">
+          <h3>تلات اكتشافات غيّرت التصميم كله</h3>
+
+          <div class="note trap">
+            <h4>١ — مؤشّر «نتائج صفر» أعمى على الداتا دي</h4>
+            <p>
+              ولا واحد من الـ 66 بحث رجع صفر نتائج. المحرّك مبني على
+              <span class="en">embeddings</span> وبيرجّع دايماً أقرب خمس منتجات، فالفشل بيظهر
+              كنتائج <strong>غلط</strong>، مش نتائج <strong>فاضية</strong>. لو بنيت الداشبورد
+              حوالين المؤشّر ده، كنت هطلّع درجة 100 على سجلّ مليان فشل.
+            </p>
+          </div>
+
+          <div class="note trap">
+            <h4>٢ — مفيش أي داتا عن التفاعل</h4>
+            <p>
+              مفيش كليكات، ولا إضافة لعربة، ولا طلبات. البريف طالب «الاستعلامات ذات التفاعل
+              المنخفض»، وهي <strong>مش ممكن تتحسب مباشرة</strong> من المصدر ده. الحل بتاعي كان إني
+              أقيس إيه اللي الزبون عمله <em>بعد كده</em>، وأصرّح بده في كل مكان بيتذكر فيه الرقم
+              بدل ما أقدّم مؤشّر بديل على إنه الحقيقة.
+            </p>
+          </div>
+
+          <div class="note care">
+            <h4>٣ — كلمة واحدة بستّ أوجه</h4>
+            <p>
+              فراولة، فاراولة، فاراولت، فراولت، فراوله، فراول — ست صفوف في تقرير الاستعلامات،
+              وكلمة واحدة في المحل. مرتّبين كاستعلامات منفصلة، مفيش واحد فيهم شكله مستعجل. مجمّعين
+              على الكلمة، يبقوا <strong>أكبر مصدر فشل في السجلّ كله.</strong>
+            </p>
+          </div>
+        </div>
+
+        <div class="note care">
+          <h4>اللي البيانات مش بتسمح بيه</h4>
+          <p>
+            الـ 66 بحث كلهم في يوم واحد (<span class="en">2025-01-09</span>) خلال 4.5 ساعة، و7.6%
+            منهم شكلهم آلي. دي جلسة اختبار، مش ترافيك حقيقي ممثِّل. النِّسَب محسوبة بأمانة بس
+            مبنية على عيّنة صغيرة — وعشان كده بنيت كمان مولّد بيانات وهمية، عشان النظام يتجرّب
+            على 28 يوم ترافيك بأنماط معروفة.
+          </p>
+        </div>
+      </section>
+
+      <!-- ================= 3. WORKFLOW ================= -->
+      <section id="workflow">
+        <div class="sec-head"><span class="n">03</span><h2>سير العمل: من 828 ميجا لمخزن تحليلي</h2></div>
+
+        <div class="block">
+          <h3>خط المعالجة اللي بنيته</h3>
+          <ul class="pipeline">
+            <li><div class="stage"><b>SQL dump</b><span>828 MB</span></div><span class="arrow">←</span></li>
+            <li><div class="stage"><b>dump_reader</b><span>قراءة تدفّقية</span></div><span class="arrow">←</span></li>
+            <li><div class="stage"><b>loader</b><span>تطبيع + تقسيم</span></div><span class="arrow">←</span></li>
+            <li><div class="stage"><b>SQLite</b><span>مخزن تحليلي</span></div><span class="arrow">←</span></li>
+            <li><div class="stage"><b>analytics</b><span>قياس الجودة</span></div><span class="arrow">←</span></li>
+            <li><div class="stage"><b>discovery / agent</b><span>اقتراح + إجابة</span></div></li>
+          </ul>
+          <p class="tiny muted">تمريرة واحدة على الملف بتبني كل الجداول. إعادة البناء كاملة بتاخد حوالي 30 ثانية.</p>
+        </div>
+
+        <div class="block">
+          <h3>قرار: أقرا الـ dump مباشرة، مااستوردهوش</h3>
+          <ul class="plain">
+            <li><strong>مفيش سيرفر يتنصّب</strong> — ولا انتظار استيراد 828 ميجا.</li>
+            <li><strong>مفيش بيانات اعتماد تتداول</strong> — الملف بيتقرا كنصّ عادي.</li>
+            <li><strong>الذاكرة ثابتة</strong> — الجُمَل بتتقرا واحدة واحدة، الملف عمره ما بيتحمّل كله.</li>
+            <li>ومسار <span class="en">MySQL</span> حيّ موجود جنبه (<code>--source mysql</code>) للنشر اللي عنده السيرفر أصلاً.</li>
+          </ul>
+        </div>
+
+        <div class="note care">
+          <h4>عن الـ «Chunking» — المصطلح مهم هنا</h4>
+          <p>
+            المشروع ده <strong>مش نظام RAG</strong>. مفيش تقطيع نصوص، ولا حساب
+            <span class="en">embeddings</span>، ولا قاعدة متجهات. اللي موجود فعلاً أربع
+            <strong>استراتيجيات تقسيم</strong> حقيقية، كل واحدة بتحلّ مشكلة مختلفة، وموصوفة تحت
+            بأسمائها الصح.
+          </p>
+          <p>
+            وملحوظة تستاهل تتقال: محرّك البحث بتاع المتجر نفسه <em>مبني</em> على
+            <span class="en">embeddings</span> — وجدوله (<code>recommendations_productembedding</code>)
+            قاعد في الـ dump. تجاهلته عمداً، لأني بقيس <em>مخرجات</em> المحرّك مش بعيد بناءه.
+          </p>
+        </div>
+
+        <div class="block">
+          <h3>استراتيجيات التقسيم الأربعة</h3>
+          <div class="grid-2">
+
+            <div class="card">
+              <h4>تقسيم على مستوى الجملة <span class="tag">I/O</span></h4>
+              <p>
+                الملف بيتقرا سطر-سطر، والقارئ بيتتبّع حالة الاقتباسات عشان يعرف الجملة خلصت فين —
+                لأن <span class="en">mysqldump</span> ممكن يكتب جملة واحدة على أكتر من سطر.
+                والجداول اللي برّه القايمة بتتخطّى من غير ما تتحلّل أصلاً.
+              </p>
+              <p>وبعدها الصفوف بتتجمّع في <strong>دفعات 5,000</strong> قبل ما توصل القاعدة.</p>
+              <p class="where"><code>ingest/dump_reader.py</code></p>
+            </div>
+
+            <div class="card">
+              <h4>تقسيم النص لكلمات <span class="tag">NLP</span></h4>
+              <p>
+                كل اسم منتج بيتطبّع، وبعدين بيتقسّم لكلمات (أي حاجة أقل من حرفين بتتشال). وكل كلمة
+                عربية بتولّد صيغ بديلة بإزالة السوابق (ال، بال، وال، لل…) عشان «الفاكهة» و«فاكهة»
+                يبقوا مصطلح واحد.
+              </p>
+              <p>النتيجة: <strong>28,305 مصطلح</strong> في قاموس الكتالوج، كل واحد مع عدد المنتجات اللي بتستخدمه.</p>
+              <p class="where"><code>text/normalize.py</code></p>
+            </div>
+
+            <div class="card">
+              <h4>تقسيم السجلّ لجلسات <span class="tag">زمني</span></h4>
+              <p>
+                المصدر مفيهوش أي معرّف جلسة أو مستخدم، فالجلسات <strong>مستنتَجة</strong> من
+                التوقيت: أي فجوة أطول من <strong>1,800 ثانية</strong> بتبدأ جلسة جديدة.
+              </p>
+              <p>
+                ده اللي بيخلّي «بحث، وبعدين أعاد الصياغة» مقروء أصلاً — وبدونه مفيش أي مؤشّر رضا.
+                الـ 66 بحث اتقسّموا لـ <strong>3 جلسات</strong>.
+              </p>
+              <p class="where"><code>ingest/loader.py</code></p>
+            </div>
+
+            <div class="card">
+              <h4>تجميع الإملاءات على الكلمة <span class="tag">تجميع</span></h4>
+              <p>
+                كل إملاءات الكلمة الواحدة بتتطوى على صفّ واحد. ده مش تحسين عرض — ده اللي بيحوّل
+                ست صفوف أولويتها واطية لمشكلة واحدة أولويتها عالية.
+              </p>
+              <p>وكل كلمة بتاخد <strong>حُكم</strong>: إملاء، فجوة استرجاع، فجوة تشكيلة، استعلام ناقص، أو صلة.</p>
+              <p class="where"><code>analytics/terms.py</code></p>
+            </div>
+
+          </div>
+        </div>
+
+        <div class="block">
+          <h3>التطبيع العربي بالترتيب</h3>
+          <p>
+            أهم دالة في المشروع: أي مقارنة بين نصّ الزبون ونصّ الكتالوج بتعدّي عليها. نفس الدالة
+            بتشتغل على أسماء المنتجات وقت التحميل وعلى الاستعلامات وقت الاستعلام — فالمقارنة دايماً عادلة.
+          </p>
+          <ol class="plain">
+            <li>توحيد <span class="en">Unicode</span> بصيغة <span class="en">NFKC</span></li>
+            <li>إزالة التشكيل (الحركات والسكون والشدّة)</li>
+            <li>إزالة التطويل</li>
+            <li>توحيد الحروف: آ أ إ ٱ ← ا · ى ← ي · ة ← ه · ؤ ← و · ئ ← ي</li>
+            <li>تحويل الأرقام العربية-الهندية لأرقام لاتينية</li>
+            <li>توحيد حالة الأحرف اللاتينية</li>
+            <li>تحويل علامات الترقيم لمسافات، وضغط المسافات</li>
+          </ol>
+          <div class="note good">
+            <h4>الحُكم ورا القرار ده</h4>
+            <p>
+              التطبيع لازم يوحّد الاختلافات اللي <strong>مالهاش معنى</strong> ويحافظ على اللي ليها
+              معنى. «فراولة» و«فراوله» بيبقوا مصطلح واحد — ده صح. لكن «حليب» و«حليبن» بيفضلوا
+              مختلفين — وده اللي بيخلّي الخطأ الإملائي <em>قابل للقياس</em> بدل ما يتبلع بصمت.
+            </p>
+          </div>
+        </div>
+
+        <div class="block">
+          <h3>سلامة البيانات — تحقّق مش افتراض</h3>
+          <p>
+            التحميل بيشتغل بمفاتيح أجنبية مقفولة عشان السرعة، وبعدين بيمسح الصفوف اليتيمة
+            (منتج مذكور في رابط تصنيف بس مش موجود في جدول المنتجات)، وبعدها
+            <strong>بيتحقق فعلياً</strong> إن مفيش أي خرق باقي. ولو فيه، التحميل بيفشل بدل ما
+            ينشر مخزن متناقض.
+          </p>
+        </div>
+      </section>
+
+      <!-- ================= 4. STACK ================= -->
+      <section id="stack">
+        <div class="sec-head"><span class="n">04</span><h2>التقنيات والأساليب</h2></div>
+
+        <div class="block">
+          <div class="scroll">
+            <table>
+              <thead><tr><th>الطبقة</th><th>الاختيار</th><th>ليه دي بالذات</th></tr></thead>
+              <tbody>
+                <tr><td>اللغة</td><td class="mono">Python 3.11+</td><td>مكتبات نصّ وتحليل ناضجة، ونفس اللغة للـ ETL والـ API</td></tr>
+                <tr><td>الـ API</td><td class="mono">FastAPI + Uvicorn</td><td>توثيق تفاعلي على <code>/docs</code> مجاناً، وتحقق من المدخلات مدمج</td></tr>
+                <tr><td>التخزين</td><td class="mono">SQLite (WAL)</td><td>ملف واحد، مفيش سيرفر، والمخزن كله بيتعاد بناؤه بأمر واحد</td></tr>
+                <tr><td>الواجهة</td><td class="mono">HTML + CSS + JS</td><td>بدون إطار عمل وبدون <span class="en">build step</span> — أقل أجزاء متحركة ممكن تتعطّل</td></tr>
+                <tr><td>الوكيل</td><td class="mono">Anthropic SDK</td><td>حلقة استدعاء أدوات يدوية عشان كل إجابة ترجع بمسارها</td></tr>
+                <tr><td>الاختبار</td><td class="mono">pytest</td><td>289 اختبار، أقل من 11 ثانية، من غير شبكة ولا مفتاح API</td></tr>
+                <tr><td>الجودة</td><td class="mono">ruff</td><td>فحص أسلوب وأخطاء شائعة</td></tr>
+                <tr><td>التقارير</td><td class="mono">CSV + JSON</td><td>جداول مسطّحة لـ <span class="en">Power BI</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="block">
+          <h3>الأساليب اللي طبّقتها</h3>
+          <div class="grid-2">
+
+            <div class="card">
+              <h4>مسافة التحرير <span class="tag">Damerau-Levenshtein</span></h4>
+              <p>
+                لاكتشاف الأخطاء الإملائية، بميزانية <strong>متناسبة مع طول الكلمة</strong>:
+                3 حروف أو أقل ← صفر تعديلات، حتى 6 ← تعديل واحد، أطول ← تعديلين.
+              </p>
+              <p>
+                ليه؟ تعديلين بيحوّلوا <code>pas</code> لـ <code>pcs</code> وهي كلمة تانية خالص،
+                لكن نفس التعديلين بيصلّحوا كلمة طويلة لإملائها الصح.
+              </p>
+            </div>
+
+            <div class="card">
+              <h4>استقراء معجم ثنائي اللغة <span class="tag">Dice</span></h4>
+              <p>
+                كل منتج عنده اسم عربي واسم إنجليزي. تعدين التواجد المشترك عبر 25,881 منتج بيطلّع
+                معجم ترجمة <strong>من غير قاموس</strong>: حليب ↔ <span class="en">milk</span> على 293 منتج.
+              </p>
+              <p>
+                واتنين بيترجموا لنفس الكلمة الإنجليزية يبقوا مترادفين — وكده «لبن ≡ حليب» اتأسست
+                بدليل، مش بافتراض.
+              </p>
+            </div>
+
+            <div class="card">
+              <h4>درجة خطورة مركّبة <span class="tag">5 إشارات</span></h4>
+              <p>
+                كل استعلام بياخد درجة من 0 لـ 1 من خمس إشارات مستقلة، بأوزان: غياب لفظي 0.30 ·
+                استياء 0.25 · تشتّت 0.20 · نقص نتائج 0.15 · عدم استقرار 0.10.
+              </p>
+              <p>
+                <strong>الجزء الدقيق:</strong> لو إشارة مش متاحة لاستعلام معيّن، بتتشال وباقي
+                الأوزان بتتعاد مُعايرتها — عشان استعلام مالوش قياس تشتّت ميتحسبش بصمت إنه مثالي.
+              </p>
+            </div>
+
+            <div class="card">
+              <h4>وكيل مقيَّد بأدوات <span class="tag">Tool use</span></h4>
+              <p>
+                الوكيل مربوط بـ <strong>تمن أدوات</strong> وبيجاوب من خلالها بس. عمره ما بيكتب
+                <span class="en">SQL</span> وعمره ما بيشوف القاعدة، فمش قادر يخترع رقم — أسوأ حاجة
+                ممكن يعملها إنه يختار أداة غلط، والمسار بيوضّح ده.
+              </p>
+              <p>
+                <strong>وبيشتغل من غير مفتاح API:</strong> فيه مخطِّط حتمي بيوجّه السؤال بالنيّة
+                ويقرا من <em>نفس</em> الأدوات. الصياغة أبسط، الأرقام متطابقة.
+              </p>
+            </div>
+
+          </div>
+        </div>
+
+        <div class="block">
+          <h3>المؤشّرات السلوكية، بما إن التفاعل غايب</h3>
+          <ul class="plain">
+            <li><strong>اتبعه تكرار أو إعادة صياغة</strong> خلال 300 ثانية ← مجموعة النتائج مارضّتش الزبون.</li>
+            <li><strong>مااتبعهوش حاجة</strong> ← غامض، ومش بيتحسب عمداً في أي اتجاه. نهاية الجلسة ممكن تعني إن الزبون لقى اللي عايزه وراح يدفع، أو إنه يئس. السجلّ مش قادر يفرّق.</li>
+            <li><strong>اتكرّر خلال أقل من ثانيتين بنفس النتائج</strong> ← ده مش رد فعل بشري. بيتعلّم كترافيك آلي وبيتستبعد من حساب التفاعل، بس مش بيتمسح — لأن معرفة أنهي استعلامات بتجذب ترافيك آلي مفيدة في حدّ ذاتها.</li>
+          </ul>
+        </div>
+
+        <div class="block">
+          <h3>الأوامر</h3>
+          <pre><code>searchiq etl              <span class="c"># بناء المخزن من الـ dump (~30s)</span>
+searchiq sample-data      <span class="c"># أو: توليد داتا وهمية لو مفيش dump</span>
+searchiq report           <span class="c"># ملخّص جودة البحث في الترمينال</span>
+searchiq discover         <span class="c"># اكتشاف المترادفات والأخطاء</span>
+searchiq suggestions      <span class="c"># قراءة طابور المراجعة</span>
+searchiq approve 3        <span class="c"># تسجيل قرار</span>
+searchiq export -o rules.json
+searchiq ask "which queries are wasting the most traffic?" --trace
+searchiq digest --days 7
+searchiq export-bi        <span class="c"># جداول مسطّحة لـ Power BI</span>
+searchiq serve            <span class="c"># الداشبورد على 127.0.0.1:8000</span></code></pre>
+        </div>
+      </section>
+
+      <!-- ================= 5. RESULTS ================= -->
+      <section id="results">
+        <div class="sec-head"><span class="n">05</span><h2>النتائج على الداتا الحقيقية</h2></div>
+
+        <p>دي مخرجات فعلية للكود على الـ dump الحقيقي، مش أمثلة توضيحية.</p>
+
+        <div class="block">
+          <h3>درجة الصحة العامة: <span class="mono">64.4 / 100</span></h3>
+          <div class="scroll">
+            <table>
+              <thead><tr><th>المؤشّر</th><th class="num">القيمة</th><th>يعني إيه</th></tr></thead>
+              <tbody>
+                <tr><td>نتائج غير ذات صلة</td><td class="num">12.1%</td><td>البحث رجّع حاجة مافيهاش الكلمة المطلوبة</td></tr>
+                <tr><td>نتائج صفر</td><td class="num">0.0%</td><td>المؤشّر الأعمى — المحرّك بيرجّع حاجة دايماً</td></tr>
+                <tr><td>نتائج ناقصة</td><td class="num">6.1%</td><td>رجع أقل من 5 منتجات</td></tr>
+                <tr><td>فجوات استرجاع</td><td class="num">4</td><td>موجود في الكتالوج، والبحث ماطلّعهوش</td></tr>
+                <tr><td>أعاد البحث أو الصياغة</td><td class="num">88.5%</td><td>مؤشّر سلوكي، مش داتا كليكات</td></tr>
+                <tr><td>ترافيك آلي</td><td class="num">7.6%</td><td>تكرار أقل من ثانيتين — مستبعَد من التفاعل</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="block">
+          <h3>أسوأ تلات حالات</h3>
+
+          <div class="finding sev-high">
+            <p class="q">حليبن — 3 عمليات بحث · خطورة 0.59</p>
+            <p>
+              الزبون كتب «حليب» بحرف زيادة. البحث رجّع: شاي بلبن، كوردن بلو، وبرجر بيف. الكتالوج
+              فيه <strong>322 منتج</strong> بيستخدموا كلمة «حليب» — ولا واحد فيهم رجع.
+              <strong>ده مش نقص بضاعة، ده عطل استرجاع.</strong>
+            </p>
+          </div>
+
+          <div class="finding sev-high">
+            <p class="q">فاراولت — عمليتين · خطورة 0.84</p>
+            <p>
+              خطأ إملائي في «فراولة». رجّع منتج واحد بالظبط:
+              <span class="en">Agnesi Farfalle Pasta</span> — مكرونة، مش فراولة، بس الاسم قريب
+              حرفياً. الكتالوج فيه <strong>308 منتج فراولة</strong>.
+            </p>
+          </div>
+
+          <div class="finding sev-mid">
+            <p class="q">فاكهة — 11 عملية بحث · خطورة 0.40</p>
+            <p>
+              كلمة مكتوبة صح تماماً. البحث رجّع سكينة مطبخ، طبق تقديم، جوافة، وكيس سكر. كل الـ 11
+              عملية اتعلّمت، و100% منهم اتبعهم بحث تاني. <strong>ده مش إملاء — ده صلة.</strong>
+            </p>
+          </div>
+        </div>
+
+        <div class="block">
+          <h3>اللي الاكتشاف الآلي اقترحه</h3>
+          <div class="scroll">
+            <table>
+              <thead><tr><th>النوع</th><th>الاقتراح</th><th class="num">الثقة</th><th>الدليل</th></tr></thead>
+              <tbody>
+                <tr><td>إملاء</td><td>فاراوله ← فراوله</td><td class="num">0.95</td><td>تعديل واحد · 308 منتج · الزبون صحّحها بنفسه</td></tr>
+                <tr><td>إملاء</td><td>حليبن ← حليب</td><td class="num">0.90</td><td>تعديل واحد · 322 منتج</td></tr>
+                <tr><td>استعلام ناقص</td><td class="mono">past → pasta</td><td class="num">0.95</td><td>بادئة لكلمة بيستخدمها 384 منتج</td></tr>
+                <tr><td>مترادف</td><td>حليب ≡ لبن</td><td class="num">0.74</td><td>إعادة صياغة + تداخل نتائج + محاذاة عبر اللغتين</td></tr>
+                <tr><td>مترادف</td><td><span class="en">milk</span> ≡ حليب</td><td class="num">0.58</td><td>محاذاة الكتالوج عبر اللغتين</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="note good">
+            <h4>الفرق بين الخطأ الإملائي والاستعلام الناقص</h4>
+            <p>
+              <code>past → pasta</code> <strong>مش</strong> خطأ إملائي — ده زبون ماكمّلش الكتابة،
+              وتصحيح استعلامه هيغيّر قصده. القاعدة اللي استخدمتها: لو الكلمة الأضعف
+              <em>بادئة</em> للأقوى، يبقى استعلام ناقص والحل اقتراح تلقائي. ولو الأضعف
+              <em>أطول</em>، يبقى الزبون كتب حرف زيادة والحل قاموس تصحيح.
+            </p>
+          </div>
+        </div>
+
+        <div class="note good">
+          <h4>اتجاه التصحيح بيجي من الكتالوج، مش من التكرار</h4>
+          <p>
+            «حليب» هي الصح لأن <strong>322 منتج</strong> بيستخدموها — بغضّ النظر عن أنهي إملاء
+            اتكتب أكتر. لو كنت رتّبت بالتكرار، عيّنة صغيرة فيها خطأ متكرر كانت ممكن تقلب الاتجاه
+            وتخلّي النظام «يصحّح» الإملاء الصح للغلط.
+          </p>
+        </div>
+
+        <div class="block">
+          <h3>وكمان اتسلّم</h3>
+          <ul class="plain">
+            <li><strong>ملخّص أسبوعي</strong> — الأداء مقارنة بالفترة السابقة، والبحثات اللي رجعت فاضية مقسّمة لعطل استرجاع ونقص تشكيلة، وكل المعلّق للمراجعة. متاح من الـ CLI والـ API وكتحميل <span class="en">Markdown</span>.</li>
+            <li><strong>مولّد بيانات وهمية</strong> — بيكتب ملف <span class="en">mysqldump</span> حقيقي فيه استعلامات صفرية وأخطاء إملائية واستعلامات ناقصة ومصطلحات ضعيفة التفاعل مزروعة عمداً، عشان النظام يشتغل فوراً من غير المصدر بتاع الـ 828 ميجا.</li>
+            <li><strong>تصدير Power BI</strong> — ستّ جداول مسطّحة بـ <span class="en">CSV</span> و<span class="en">JSON</span>. وكل رقم فيها بيتقرا من نفس الدوال بتاعة الداشبورد، فالتقرير عمره ما يختلف مع الشاشة.</li>
+          </ul>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <footer>
+    كل رقم في المستند ده مخرَج فعلي للكود على
+    <span class="en">spinneys_database.sql</span> — 289 اختبار ناجح، والمخزن متبني من الداتا الحقيقية.
+  </footer>
+</div>
+
+<script>
+(function () {
+  var root = document.documentElement;
+  var button = document.getElementById('theme-toggle');
+  function current() {
+    var stamped = root.getAttribute('data-theme');
+    if (stamped) return stamped;
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  }
+  button.addEventListener('click', function () {
+    root.setAttribute('data-theme', current() === 'dark' ? 'light' : 'dark');
+  });
+})();
+</script>

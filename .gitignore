@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+
+# Secrets. Never committed; `.env.example` is the template.
+.env
+
+# The analytics store is a build artefact: `searchiq etl` or
+# `searchiq sample-data` rebuilds it from scratch in seconds.
+data/*.db
+data/*.db-journal
+data/*.db-shm
+data/*.db-wal
+
+# Generated sample data. Reproducible with `searchiq sample-data`.
+data/sample_dump.sql
+
+# Tool caches
+.pytest_cache/
+.ruff_cache/
+
+# Published static snapshot (`searchiq export-site`)
+site/
+
+# Power BI export (`searchiq export-bi`)
+bi/
