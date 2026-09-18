@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -479,6 +480,60 @@ def ask_agent(
     )
 
 
+# ── Answering when Gemini will not ───────────────────────────────────────
+# Two failures are routine rather than exceptional on the free tier, and one
+# tool-calling turn costs two or three requests, so a short demo can reach
+# them: 503 when the model is busy, 429 when the day's quota is gone. Showing
+# a raw API error in the chat makes a working system look broken.
+#
+# searchiq answers without any model at all — `_ask_deterministic` routes the
+# question to the same tools and renders the result. It is a private name
+# because `agent.ask()` normally chooses between the two paths by whether an
+# Anthropic key is configured; here the choice is made by what Gemini just
+# did, so the path is called directly.
+from searchiq.agent.agent import _ask_deterministic  # noqa: E402
+
+FALLBACK_NOTE = (
+    "> ⚠️ **{reason}** — this answer came from the built-in planner instead: "
+    "the same searchiq tools and the same numbers, without the model's wording.\n\n"
+)
+
+
+def _local_answer(question: str, reason: str) -> tuple[str, list[dict[str, Any]]]:
+    """Answer from the tools alone, and say why the model is not involved."""
+    with store_connect(DB_PATH, read_only=True) as conn:
+        result = _ask_deterministic(conn, question)
+    trace = [
+        {"name": call.name, "args": call.arguments, "result_preview": call.result_preview}
+        for call in result.tool_calls
+    ]
+    return FALLBACK_NOTE.format(reason=reason) + result.answer, trace
+
+
+def answer_question(
+    client: genai.Client, question: str, history: list[types.Content]
+) -> tuple[str, list[dict[str, Any]], list[types.Content]]:
+    """Ask Gemini, retrying a busy model and falling back when it will not answer."""
+    delay = 2.0
+    for attempt in range(3):
+        try:
+            return ask_agent(client, question, history)
+        except Exception as exc:  # noqa: BLE001 - the reason decides what happens next
+            text = str(exc)
+            if "RESOURCE_EXHAUSTED" in text or "429" in text:
+                # Quota is gone until it resets; retrying only wastes the wait.
+                answer, trace = _local_answer(question, "Gemini's daily quota is used up")
+                return answer, trace, history
+            if ("UNAVAILABLE" in text or "503" in text) and attempt < 2:
+                time.sleep(delay)
+                delay *= 2
+                continue
+            answer, trace = _local_answer(question, f"Gemini could not be reached ({text[:80]})")
+            return answer, trace, history
+    answer, trace = _local_answer(question, "Gemini stayed busy across three attempts")
+    return answer, trace, history
+
+
 # ── Sidebar ──────────────────────────────────────────────────────────────
 meta = cached_meta()
 RESULT_CAP = int(meta.get("result_cap", 5))
@@ -875,16 +930,9 @@ elif page == "Ask the Agent":
             st.markdown(prompt)
         with st.chat_message("assistant"):
             with st.spinner("Thinking..."):
-                try:
-                    answer, trace, new_contents = ask_agent(
-                        gemini_client, prompt, st.session_state.chat_contents
-                    )
-                except Exception as exc:  # a bad key, a network hiccup, a quota error
-                    answer, trace, new_contents = (
-                        f"The agent hit an error calling Gemini: {exc}",
-                        [],
-                        st.session_state.chat_contents,
-                    )
+                answer, trace, new_contents = answer_question(
+                    gemini_client, prompt, st.session_state.chat_contents
+                )
             st.markdown(answer)
             if trace:
                 with st.expander(f"🔧 {len(trace)} tool call(s)"):
