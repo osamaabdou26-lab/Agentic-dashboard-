@@ -165,6 +165,24 @@ def _secret(name: str) -> str:
         return ""
 
 
+def _key_hint() -> str:
+    """Say where the missing key belongs — which is not the same in both places.
+
+    Telling someone looking at a deployed copy to edit `web/.env` sends them
+    after a file that is not there: a host keeps its configuration in
+    environment variables or a secrets store. The presence of the .env file is
+    what separates a working copy from a deployment.
+    """
+    if (APP_DIR / ".env").is_file():
+        return "Add it to `web/.env`, then restart the app."
+    return (
+        "This looks like a deployment, so set it where this host keeps its "
+        "configuration — a service variable on Railway, Render or Fly, or the "
+        "secrets box on Streamlit Community Cloud. The app picks it up on the "
+        "redeploy that follows. (Running locally, it goes in `web/.env`.)"
+    )
+
+
 @st.cache_resource(show_spinner=False)
 def get_gemini_client() -> genai.Client | None:
     api_key = _secret("GEMINI_API_KEY")
@@ -483,7 +501,8 @@ st.sidebar.markdown("---")
 if gemini_client is None:
     st.sidebar.warning(
         "`GEMINI_API_KEY` is not set — the agent chat and the AI digest summary are "
-        "disabled. Search-quality analytics and the suggestion queue still work fully."
+        "disabled. Search-quality analytics and the suggestion queue still work fully.\n\n"
+        + _key_hint()
     )
 else:
     st.sidebar.success(f"Gemini connected · {GEMINI_MODEL}")
@@ -826,7 +845,7 @@ elif page == "Ask the Agent":
     st.caption(f"Natural-language Q&A over your search-quality data, via Gemini ({GEMINI_MODEL}) tool-calling.")
 
     if gemini_client is None:
-        st.error("`GEMINI_API_KEY` is not set. Add it to `web/.env` and refresh this page.")
+        st.error(f"`GEMINI_API_KEY` is not set. {_key_hint()}")
         st.stop()
 
     if "chat_contents" not in st.session_state:
