@@ -107,10 +107,38 @@ st.set_page_config(page_title="Search Pulse", page_icon="🔍", layout="wide")
 
 
 # ── Connection guard ─────────────────────────────────────────────────────
-if not DB_PATH.exists():
-    st.error("No analytics store found.")
+# A deployed copy has no store: `data/*.db` is a build artefact and is not in
+# the repository, and a hosted app has no terminal to run `searchiq etl` from.
+# So when the store is missing, build one from the sample generator — the same
+# path `searchiq sample-data` takes, through the same ETL the real dump uses.
+# Locally this never fires, because `searchiq etl` has already run.
+@st.cache_resource(show_spinner=False)
+def ensure_store() -> str:
+    """Return how the store got here, building a sample one if there is none."""
+    if DB_PATH.exists():
+        return "existing"
+
+    from searchiq.ingest.loader import load as _load
+    from searchiq.ingest.sample_data import generate_sample_dump as _generate
+
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    dump = DB_PATH.parent / "sample_dump.sql"
+    _generate(dump)
+    _load(db_path=DB_PATH, dump_path=dump, source_label="generated sample data (first run)")
+    # Without this the review queue is empty and the app looks half-built.
+    with store_connect(DB_PATH) as conn:
+        refresh_suggestions(conn)
+    return "generated"
+
+
+try:
+    with st.spinner("First run: building a sample analytics store…"):
+        STORE_ORIGIN = ensure_store()
+except Exception as exc:  # noqa: BLE001 - show the reason rather than a stack trace
+    st.error("No analytics store, and building a sample one failed.")
     st.markdown(
         f"Expected the analytics database at `{DB_PATH}`.\n\n"
+        f"Automatic setup failed with: `{exc}`\n\n"
         "From the project root, run one of:\n"
         "```bash\nsearchiq sample-data     # no data to hand: generate a mock dataset\n"
         "searchiq etl              # load the real mysqldump extract\n```\n"
@@ -120,9 +148,26 @@ if not DB_PATH.exists():
 
 
 # ── Gemini client ────────────────────────────────────────────────────────
+def _secret(name: str) -> str:
+    """Read a setting from the environment, then from Streamlit's secrets.
+
+    Locally the value comes from `web/.env`. A hosted deployment has no .env
+    file — Streamlit Community Cloud takes secrets through its own TOML box —
+    so fall back to `st.secrets`. Reading it raises when no secrets exist at
+    all, which is the normal local case, hence the guard.
+    """
+    value = os.environ.get(name, "").strip()
+    if value:
+        return value
+    try:
+        return str(st.secrets[name]).strip()
+    except Exception:  # noqa: BLE001 - no secrets configured is not an error
+        return ""
+
+
 @st.cache_resource(show_spinner=False)
 def get_gemini_client() -> genai.Client | None:
-    api_key = os.environ.get("GEMINI_API_KEY", "").strip()
+    api_key = _secret("GEMINI_API_KEY")
     if not api_key:
         return None
     try:
@@ -424,6 +469,10 @@ st.sidebar.title("🔍 Search Pulse")
 st.sidebar.caption("Agentic Dashboard Intelligence")
 if meta.get("loaded_at"):
     st.sidebar.caption(f"Data loaded {meta['loaded_at'][:19].replace('T', ' ')}")
+if STORE_ORIGIN == "generated":
+    # A deployed copy seeds itself. Say so plainly: these numbers are shaped by
+    # the generator, and nobody should read them as production figures.
+    st.sidebar.info("Generated sample data — not the real catalogue.", icon="🧪")
 
 page = st.sidebar.radio(
     "Section",

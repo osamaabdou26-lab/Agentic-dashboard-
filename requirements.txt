@@ -1,0 +1,22 @@
+# Dependencies for the hosted Streamlit dashboard (web/app.py).
+#
+# This duplicates web/requirements.txt on purpose. Streamlit Community Cloud
+# resolves dependencies from the repository root, and this repository also has
+# a pyproject.toml there describing the searchiq package — whose dependencies
+# (fastapi, uvicorn, anthropic) the Streamlit app does not need and which does
+# not list streamlit at all. An explicit root requirements.txt removes the
+# ambiguity about which file wins.
+#
+# The searchiq engine itself is not installed here: web/app.py puts ./src on
+# sys.path and imports it directly, and everything it touches is standard
+# library plus python-dotenv.
+#
+# For the CLI, the API and the tests, use the package instead:
+#     pip install -e ".[dev]"
+
+streamlit
+plotly
+pandas
+google-genai
+python-dotenv
+truststore
