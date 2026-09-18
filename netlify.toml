@@ -1,0 +1,17 @@
+# Netlify reads this automatically. The site is plain files, so there is no
+# build step to run — the publish directory is the whole of it.
+[build]
+  publish = "."
+  command = ""
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+
+# The data files change on every export; the shell rarely does.
+[[headers]]
+  for = "/data/*"
+  [headers.values]
+    Cache-Control = "public, max-age=300"

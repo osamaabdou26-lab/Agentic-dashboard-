@@ -1,0 +1,936 @@
+/*
+ * Search Pulse dashboard.
+ *
+ * Two things drive the visual decisions here.
+ *
+ * First, the content is bilingual. Arabic query terms and product names have to
+ * render right-to-left inside an otherwise left-to-right English interface, so
+ * every element that can hold a query term carries `dir="auto"` in the markup
+ * and is styled to work in either direction.
+ *
+ * Second, severity has to be legible at a glance without relying on colour
+ * alone: every severity colour is paired with a text label, so the table is
+ * readable in greyscale and to colour-blind readers.
+ *
+ */
+
+/* --------------------------------------------------------------------------
+   Palette.
+
+   Dark-first. The base is true black, not a dark navy: on an OLED panel it is
+   actually off, and it gives the accent colours a ground with nothing in it to
+   compete with. Surfaces step up from there in near-neutral greys, so a card
+   reads as raised without a border doing all the work.
+
+   Three accents, and they are the severity scale rather than decoration:
+   green is healthy, amber needs attention, red is severe. Reusing the brand
+   accent as the "healthy" colour is deliberate — the product's own colour is
+   the one that means "this is fine", so a screen full of green reads correctly
+   before a single label is read. Every severity colour is still paired with a
+   text label, so nothing here depends on colour alone.
+
+   Vivid colour on black inverts the usual contrast problem: the accents are
+   bright enough to sit on black, which means text placed *on* an accent must be
+   near-black, not white. That is `--accent-contrast`.
+
+   Three theme states, as before. The default (nothing stamped) is now dark;
+   light is an explicit choice, and `system` follows the operating system.
+   -------------------------------------------------------------------------- */
+:root {
+  color-scheme: dark;
+
+  --bg: #000000;
+  --surface: #0c0d10;
+  --surface-sunken: #141619;
+  --border: #23262c;
+  --text: #f2f4f7;
+  --text-muted: #8b929e;
+
+  --accent: #00e58a;
+  --accent-soft: #04291c;
+  --accent-contrast: #00120b;
+
+  --severe: #ff4d5e;
+  --warn: #ffc233;
+  --ok: #3ddc84;
+  --info: #58b6ff;
+  --info-soft: #06203a;
+
+  --severe-soft: #2c0a11;
+  --warn-soft: #2b2005;
+  --ok-soft: #05291a;
+
+  --radius: 10px;
+  /* On black a drop shadow is invisible, so elevation is carried by a hairline
+     ring of light instead. */
+  --shadow: 0 0 0 1px rgba(255, 255, 255, 0.04), 0 8px 24px rgba(0, 0, 0, 0.6);
+
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",
+    Arial, "Noto Sans Arabic", sans-serif;
+  --mono: "SF Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+
+/* Light theme. Reached by choosing it in the toggle, or by choosing `system`
+   on a machine set to light. Every token is redefined; no component styles
+   itself inside either block. */
+:root[data-theme="light"],
+:root[data-theme="system"] {
+  color-scheme: light;
+
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --surface-sunken: #f0f2f5;
+  --border: #dfe3e8;
+  --text: #16191d;
+  --text-muted: #656d78;
+
+  --accent: #00875a;
+  --accent-soft: #e2f7ed;
+  --accent-contrast: #ffffff;
+
+  --severe: #c02b3a;
+  --warn: #9a6400;
+  --ok: #1f7a4d;
+  --info: #1a5fb4;
+  --info-soft: #e7f0fc;
+
+  --severe-soft: #fbe9eb;
+  --warn-soft: #fdf1df;
+  --ok-soft: #e6f4ec;
+
+  --shadow: 0 1px 2px rgba(16, 24, 40, 0.06), 0 1px 3px rgba(16, 24, 40, 0.04);
+}
+
+/* `system` on a dark machine goes back to the black palette. Spelled out
+   rather than left to the cascade, because the light block above claims
+   `system` unconditionally. */
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="system"] {
+    color-scheme: dark;
+
+    --bg: #000000;
+    --surface: #0c0d10;
+    --surface-sunken: #141619;
+    --border: #23262c;
+    --text: #f2f4f7;
+    --text-muted: #8b929e;
+
+    --accent: #00e58a;
+    --accent-soft: #04291c;
+    --accent-contrast: #00120b;
+
+    --severe: #ff4d5e;
+    --warn: #ffc233;
+    --ok: #3ddc84;
+    --info: #58b6ff;
+    --info-soft: #06203a;
+
+    --severe-soft: #2c0a11;
+    --warn-soft: #2b2005;
+    --ok-soft: #05291a;
+
+    --shadow: 0 0 0 1px rgba(255, 255, 255, 0.04), 0 8px 24px rgba(0, 0, 0, 0.6);
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.55 var(--font);
+  -webkit-font-smoothing: antialiased;
+  /* Checkboxes, radios and the scrollbar are painted by the browser in its own
+     blue unless told otherwise, which on this palette reads as a stray element
+     from another application. */
+  accent-color: var(--accent);
+  scrollbar-color: var(--border) var(--bg);
+}
+
+::selection {
+  background: color-mix(in srgb, var(--accent) 35%, transparent);
+  color: var(--text);
+}
+
+h1, h2, h3 { line-height: 1.25; margin: 0 0 0.4em; }
+h1 { font-size: 1.3rem; letter-spacing: -0.01em; }
+h2 { font-size: 1.05rem; margin-top: 2rem; }
+p { margin: 0 0 0.8em; }
+
+.muted { color: var(--text-muted); font-size: 0.9rem; }
+
+/* Masthead */
+
+.masthead {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 0.9rem 1.5rem 0;
+}
+
+.masthead-title { display: flex; align-items: baseline; gap: 0.9rem; flex-wrap: wrap; }
+.provenance { color: var(--text-muted); font-size: 0.8rem; margin: 0; }
+
+.tabs { display: flex; gap: 0.15rem; margin-top: 0.7rem; overflow-x: auto; }
+
+.tab {
+  appearance: none;
+  background: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.9rem;
+  padding: 0.5rem 0.8rem;
+  white-space: nowrap;
+}
+.tab:hover { color: var(--text); }
+.tab.is-active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+
+/* Pending count, on the tab itself. A review queue whose size is invisible
+   is a review queue that stops being reviewed. */
+.tab-badge {
+  background: var(--accent-soft);
+  border-radius: 999px;
+  color: var(--accent);
+  font-size: 0.72rem;
+  font-weight: 600;
+  margin-inline-start: 0.4rem;
+  padding: 0.08rem 0.42rem;
+}
+
+main { margin: 0 auto; max-width: 1100px; padding: 1.5rem; }
+
+.view { display: none; }
+.view.is-active { display: block; }
+
+/* Hero */
+
+/* The first thing a visitor sees: what this is, and what it is for. The
+   figures inside it are live rather than illustrative, so the hero doubles as
+   proof the pipeline has actually run. */
+.hero {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  margin-bottom: 1.5rem;
+  overflow: hidden;
+  position: relative;
+}
+
+/* A soft wash of the accent colour, behind the text. Purely decorative, so it
+   is hidden from assistive technology and never carries meaning. */
+.hero-glow {
+  background:
+    radial-gradient(60rem 22rem at 12% -20%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 70%),
+    radial-gradient(40rem 18rem at 95% 0%, color-mix(in srgb, var(--ok) 14%, transparent), transparent 70%);
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+}
+
+.hero-content { padding: 2rem 2rem 1.75rem; position: relative; }
+
+.hero-eyebrow {
+  color: var(--accent);
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  margin: 0 0 0.5rem;
+  text-transform: uppercase;
+}
+
+.hero-title {
+  font-size: clamp(1.6rem, 3.4vw, 2.3rem);
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  margin: 0 0 0.6rem;
+  max-width: 20ch;
+}
+
+.hero-lede {
+  color: var(--text-muted);
+  font-size: 1.02rem;
+  line-height: 1.6;
+  margin: 0 0 1.4rem;
+  max-width: 62ch;
+}
+
+.hero-stats {
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  display: grid;
+  gap: 0.5rem 1.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  margin: 0 0 1.5rem;
+  padding: 1rem 0;
+}
+.hero-stat dt {
+  color: var(--text-muted);
+  font-size: 0.73rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.hero-stat dd {
+  font-size: 1.55rem;
+  font-weight: 680;
+  letter-spacing: -0.025em;
+  margin: 0.1rem 0 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.hero-pillars {
+  display: grid;
+  gap: 1.4rem;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.hero-pillars h3 {
+  font-size: 0.95rem;
+  font-weight: 660;
+  margin: 0 0 0.35rem;
+}
+.hero-pillars p {
+  color: var(--text-muted);
+  font-size: 0.875rem;
+  line-height: 1.55;
+  margin: 0 0 0.5rem;
+}
+
+.hero-link {
+  background: none;
+  border: 0;
+  color: var(--accent);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 0;
+}
+.hero-link:hover { text-decoration: underline; }
+.hero-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 3px; }
+
+@media (max-width: 560px) {
+  /* Generous desktop padding costs a phone a third of its width, which pushes
+     the stat grid down to a single very tall column. */
+  .hero-content { padding: 1.4rem 1.15rem 1.25rem; }
+  .hero-stats { gap: 0.6rem 1rem; grid-template-columns: repeat(2, 1fr); }
+  .hero-stat dd { font-size: 1.3rem; }
+  main { padding: 1rem; }
+}
+
+/* Health dial */
+
+.health {
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  display: flex;
+  gap: 1.75rem;
+  padding: 1.4rem;
+  flex-wrap: wrap;
+}
+
+.health-dial { position: relative; flex: 0 0 132px; height: 132px; width: 132px; }
+.health-dial svg { height: 100%; width: 100%; transform: rotate(-90deg); }
+
+.dial-track, .dial-value {
+  fill: none;
+  stroke-width: 9;
+  stroke-linecap: round;
+}
+.dial-track { stroke: var(--surface-sunken); }
+.dial-value {
+  stroke: var(--ok);
+  stroke-dasharray: 327;          /* 2 * pi * r, r = 52 */
+  stroke-dashoffset: 327;
+  transition: stroke-dashoffset 0.7s ease, stroke 0.3s ease;
+}
+
+.health-number {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.1rem;
+}
+.health-number strong { font-size: 2rem; letter-spacing: -0.03em; }
+.health-number span { color: var(--text-muted); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.04em; }
+
+.health-copy { flex: 1 1 320px; }
+.notes { color: var(--text-muted); font-size: 0.85rem; margin: 0.6rem 0 0; padding-left: 1.1rem; }
+.notes li { margin-bottom: 0.3rem; }
+
+/* KPI grid */
+
+.kpi-grid {
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  margin-top: 1rem;
+}
+
+.kpi {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 0.9rem 1rem;
+}
+.kpi-value { font-size: 1.5rem; font-weight: 650; letter-spacing: -0.02em; }
+.kpi-label { color: var(--text-muted); font-size: 0.8rem; margin-top: 0.15rem; }
+.kpi-note { color: var(--text-muted); font-size: 0.72rem; margin-top: 0.35rem; }
+
+/* Impact bar chart */
+
+.chart {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 1rem 1.1rem;
+}
+
+.bar-row {
+  align-items: center;
+  display: grid;
+  gap: 0.7rem;
+  grid-template-columns: minmax(90px, 130px) 1fr auto;
+  margin-bottom: 0.55rem;
+}
+.bar-label { font-size: 0.9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Both are spans, and an inline element ignores width and height outright —
+   the bars render at zero size without an explicit block display. */
+.bar-track {
+  background: var(--surface-sunken);
+  border-radius: 4px;
+  display: block;
+  height: 11px;
+  overflow: hidden;
+}
+.bar-fill {
+  border-radius: 4px;
+  display: block;
+  height: 100%;
+  min-width: 2px;          /* the smallest bar stays visible */
+  transition: width 0.5s ease;
+}
+.bar-value { color: var(--text-muted); font-size: 0.78rem; font-variant-numeric: tabular-nums; }
+
+/* Cards */
+
+.cards { display: grid; gap: 0.8rem; }
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 0.95rem 1.1rem;
+}
+.card.sev-severe { border-left-color: var(--severe); }
+.card.sev-warn   { border-left-color: var(--warn); }
+.card.sev-ok     { border-left-color: var(--ok); }
+
+.card-head {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  justify-content: space-between;
+  margin-bottom: 0.4rem;
+}
+.card-title { font-size: 1.02rem; font-weight: 650; }
+
+/* Long product names and rationales must wrap inside the card rather than
+   widen it; nothing on this page may scroll the body horizontally. */
+.card, .card p, .card li { min-width: 0; overflow-wrap: anywhere; }
+.card-meta { color: var(--text-muted); font-size: 0.82rem; }
+.card ul { margin: 0.4rem 0 0; padding-left: 1.1rem; }
+.card li { font-size: 0.88rem; margin-bottom: 0.28rem; }
+
+/* Badges */
+
+.badge {
+  border-radius: 999px;
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  padding: 0.12rem 0.55rem;
+  white-space: nowrap;
+}
+.badge-severe { background: var(--severe-soft); color: var(--severe); }
+.badge-warn   { background: var(--warn-soft);   color: var(--warn); }
+.badge-ok     { background: var(--ok-soft);     color: var(--ok); }
+.badge-info   { background: var(--info-soft);   color: var(--info); }
+
+/* Tables */
+
+.table-scroll {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow-x: auto;
+}
+
+table { border-collapse: collapse; font-size: 0.88rem; min-width: 760px; width: 100%; }
+
+th, td { padding: 0.55rem 0.8rem; text-align: left; }
+th {
+  background: var(--surface-sunken);
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  position: sticky;
+  top: 0;
+  text-transform: uppercase;
+}
+td { border-top: 1px solid var(--border); }
+.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+tbody tr { cursor: pointer; }
+tbody tr:hover { background: var(--surface-sunken); }
+tbody tr.is-selected { background: var(--accent-soft); }
+
+/* Detail panel */
+
+.detail {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  margin-top: 1rem;
+  padding: 1.1rem;
+}
+
+.result-list { display: grid; gap: 0.4rem; margin: 0.5rem 0 0; padding: 0; list-style: none; }
+.result-list li {
+  background: var(--surface-sunken);
+  border-radius: 6px;
+  display: grid;
+  gap: 0.2rem;
+  grid-template-columns: 1.6rem 1fr;
+  padding: 0.45rem 0.6rem;
+  font-size: 0.87rem;
+}
+.result-rank { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+
+/* The Arabic and English names of one product go on separate lines: side by
+   side they read as a single run of mixed-direction text and neither is
+   legible. */
+.result-ar { color: var(--text-muted); display: block; font-size: 0.84rem; margin-top: 0.1rem; }
+
+/* Controls */
+
+.toolbar {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.8rem;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+.toolbar-actions { display: flex; gap: 0.5rem; }
+.filters { display: flex; gap: 0.35rem; }
+
+.button {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.86rem;
+  padding: 0.42rem 0.85rem;
+  text-decoration: none;
+  display: inline-block;
+}
+.button:hover { background: var(--surface-sunken); }
+.button-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-contrast);
+  font-weight: 600;
+}
+.button-primary:hover { filter: brightness(1.08); background: var(--accent); }
+.button:disabled { cursor: not-allowed; opacity: 0.55; }
+
+.chip {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.82rem;
+  padding: 0.3rem 0.8rem;
+}
+.chip.is-active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+
+input[type="search"], input[type="text"], select {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.88rem;
+  padding: 0.42rem 0.7rem;
+}
+input:focus-visible, select:focus-visible, .button:focus-visible, .tab:focus-visible, .chip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.checkbox { align-items: center; display: flex; font-size: 0.88rem; gap: 0.4rem; }
+
+/* Suggestion actions */
+
+.rule {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 1.02rem;
+  gap: 0.5rem;
+  font-weight: 600;
+}
+.rule code {
+  background: var(--surface-sunken);
+  border-radius: 5px;
+  font-family: var(--mono);
+  font-size: 0.95rem;
+  padding: 0.1rem 0.4rem;
+}
+.rule .arrow { color: var(--text-muted); }
+
+.card-actions { display: flex; gap: 0.5rem; margin-top: 0.75rem; }
+
+/* Evidence is raw JSON of unbounded length. Without an explicit wrap it is one
+   unbreakable token that stretches its card and scrolls the whole page
+   sideways. */
+.evidence {
+  color: var(--text-muted);
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  margin-top: 0.55rem;
+  overflow-wrap: anywhere;
+}
+
+/* Ask */
+
+.ask-form { display: flex; gap: 0.5rem; margin-bottom: 0.8rem; }
+.ask-form input { flex: 1; }
+
+.examples { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 1rem; }
+
+.answer {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 1.1rem 1.2rem;
+}
+.answer-body { white-space: pre-wrap; }
+.answer-body strong { font-weight: 650; }
+
+.trace {
+  border-top: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  margin-top: 0.9rem;
+  padding-top: 0.7rem;
+}
+.trace code { font-family: var(--mono); }
+
+/* Digest */
+
+.digest {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 1.3rem 1.5rem;
+}
+.digest h1 { font-size: 1.2rem; }
+.digest h2 { border-bottom: 1px solid var(--border); padding-bottom: 0.3rem; }
+.digest table { min-width: 0; }
+.digest code {
+  background: var(--surface-sunken);
+  border-radius: 4px;
+  font-family: var(--mono);
+  font-size: 0.87rem;
+  padding: 0.06rem 0.32rem;
+}
+.digest em { color: var(--text-muted); font-style: normal; font-size: 0.85rem; }
+
+/* Toast */
+
+.toast {
+  background: var(--text);
+  border-radius: 8px;
+  bottom: 1.5rem;
+  color: var(--bg);
+  font-size: 0.87rem;
+  left: 50%;
+  padding: 0.6rem 1.1rem;
+  position: fixed;
+  transform: translateX(-50%);
+  z-index: 50;
+}
+
+.empty { color: var(--text-muted); font-size: 0.9rem; padding: 1.2rem; text-align: center; }
+
+/* Arabic terms inside an English interface: let the browser pick direction
+   per element rather than forcing the whole page one way. */
+[dir="auto"] { unicode-bidi: plaintext; }
+
+/*
+   Interaction layer
+
+   Everything below serves one goal: the dashboard should be operable without
+   a mouse, legible on a phone, and honest about what it is doing while it
+   waits. Each block notes the specific problem it solves.
+   */
+
+/* Skip link */
+
+/* The masthead holds a period control, a theme toggle and six tabs. Without a
+   skip link a keyboard user traverses all of them before reaching content. */
+.skip-link {
+  background: var(--accent);
+  border-radius: 0 0 6px 0;
+  color: var(--accent-contrast);
+  font-size: 0.85rem;
+  left: 0;
+  padding: 0.5rem 0.9rem;
+  position: fixed;
+  top: 0;
+  transform: translateY(-120%);
+  z-index: 60;
+}
+.skip-link:focus { transform: translateY(0); }
+
+/* Masthead controls */
+
+.masthead-controls {
+  align-items: center;
+  display: flex;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+
+.control { align-items: center; display: flex; gap: 0.4rem; }
+.control-label {
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.icon-button {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.95rem;
+  height: 31px;
+  line-height: 1;
+  width: 31px;
+}
+.icon-button:hover { background: var(--surface-sunken); color: var(--text); }
+.icon-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Says which slice of the log every figure on screen was computed from, so a
+   filtered number is never mistaken for the whole picture. */
+.period-note {
+  background: var(--accent-soft);
+  border-radius: 6px;
+  color: var(--accent);
+  font-size: 0.78rem;
+  margin: 0 0 0.7rem;
+  padding: 0.35rem 0.7rem;
+}
+
+/* Sortable columns */
+
+/* A `<button>` rather than a click handler on the `<th>`: sorting has to be
+   reachable by keyboard and announced as a control. */
+.sort {
+  background: none;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  letter-spacing: inherit;
+  padding: 0;
+  text-transform: inherit;
+}
+.sort::after { content: ""; display: inline-block; width: 0.85em; }
+.sort[aria-sort="ascending"]::after { content: "\2191"; }
+.sort[aria-sort="descending"]::after { content: "\2193"; }
+.sort[aria-sort] { color: var(--accent); }
+.sort:hover { color: var(--text); }
+.sort:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Loading skeletons */
+
+/* A blank panel reads as "nothing found", which is the most misleading thing
+   this dashboard could show. Skeletons say "still counting" instead. */
+.skeleton { display: grid; gap: 0.55rem; }
+.skeleton-row {
+  background: linear-gradient(
+    90deg,
+    var(--surface-sunken) 25%,
+    var(--border) 37%,
+    var(--surface-sunken) 63%
+  );
+  background-size: 400% 100%;
+  border-radius: 6px;
+  height: 2.4rem;
+  animation: shimmer 1.4s ease infinite;
+}
+@keyframes shimmer {
+  0% { background-position: 100% 0; }
+  100% { background-position: 0 0; }
+}
+
+/* Digest deltas */
+
+.delta { font-weight: 600; }
+.delta-better { color: var(--ok); }
+.delta-worse  { color: var(--severe); }
+
+/* Review queue */
+
+/* Stated once, at the top of the panel, rather than implied by the controls:
+   discovery proposes and a person disposes, and nothing here is live. */
+.review-banner {
+  background: var(--accent-soft);
+  border-inline-start: 3px solid var(--accent);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 0.86rem;
+  line-height: 1.5;
+  margin: 0 0 0.9rem;
+  padding: 0.7rem 0.9rem;
+}
+
+/* Who decided, when, and why — carried on the card so a later reviewer reading
+   an approved rule can see the reasoning rather than only the outcome. */
+.review-state {
+  align-items: center;
+  color: var(--text-muted);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 0.82rem;
+  gap: 0.35rem;
+  margin-top: 0.7rem;
+}
+
+/* Review notes */
+
+/* The API has always accepted a reviewer note; the UI never sent one, so the
+   reason a proposal was rejected was lost. */
+.review-note {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.84rem;
+  margin-top: 0.6rem;
+  padding: 0.4rem 0.6rem;
+  width: 100%;
+}
+
+/* Back to top */
+
+.to-top {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  bottom: 1.5rem;
+  box-shadow: var(--shadow);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 1rem;
+  height: 40px;
+  position: fixed;
+  right: 1.5rem;
+  width: 40px;
+  z-index: 40;
+}
+.to-top:hover { background: var(--surface-sunken); }
+.to-top:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Motion */
+
+html { scroll-behavior: smooth; }
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* Phones: the query table becomes cards */
+
+/* Eight columns cannot be read on a 375px screen, and a horizontally scrolling
+   table hides the diagnosis — the column that matters most. Below this width
+   each row is restacked as a labelled card. */
+@media (max-width: 760px) {
+  #queries-table { min-width: 0; }
+  #queries-table thead { display: none; }
+  #queries-table tbody tr {
+    border-top: 1px solid var(--border);
+    display: grid;
+    gap: 0.2rem 0.8rem;
+    grid-template-columns: auto 1fr;
+    padding: 0.7rem 0.8rem;
+  }
+  #queries-table tbody td { border: 0; padding: 0; }
+
+  /* The query itself and its diagnosis span the card; the figures pair up with
+     the labels JavaScript attaches as `data-label`. */
+  #queries-table tbody td:first-child {
+    font-size: 1.05rem;
+    font-weight: 650;
+    grid-column: 1 / -1;
+  }
+  #queries-table tbody td:last-child {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    grid-column: 1 / -1;
+    margin-top: 0.3rem;
+  }
+  #queries-table tbody td[data-label] { text-align: left; }
+  #queries-table tbody td[data-label]::before {
+    color: var(--text-muted);
+    content: attr(data-label) ": ";
+    font-size: 0.78rem;
+  }
+
+  .masthead-controls { margin-left: 0; width: 100%; }
+  .control { flex: 1; }
+  .control select { flex: 1; }
+  .to-top { bottom: 1rem; right: 1rem; }
+}
