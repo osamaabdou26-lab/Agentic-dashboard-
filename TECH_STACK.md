@@ -47,9 +47,17 @@ completion with no API key and no network access.
 | JavaScript | ES2017+, no transpiler, no bundler | `web/app.js`, plain browser runtime |
 | HTML / CSS | Static, hand written | `web/index.html`, `web/styles.css` |
 
-`.python-version` pins **3.12** for deployment. Railpack defaults to 3.13, where
-several wheels the dashboard needs are not yet published, so the build fails
-rather than falling back. The pin avoids that.
+**The deployment build no longer pins a Python version.** `.python-version`, which
+pinned 3.12, was removed from the repository. Railpack resolves the version in
+this order: `RAILPACK_PYTHON_VERSION`, then a version file
+(`.python-version`, `.tool-versions`, `mise.toml`), then `runtime.txt`, then
+`Pipfile`, and otherwise defaults to **3.13.2**. With none of those present, the
+next build takes the default.
+
+That is worth knowing before the next deploy. Railpack installs Python from
+precompiled binaries and fails the build outright when one is unavailable for a
+requested version rather than compiling from source. To pin it again, set
+`RAILPACK_PYTHON_VERSION=3.12` as a service variable, or restore the file.
 
 There is no C or C++ in the project, no CUDA, and no Node.js runtime. Node is not
 required to build or serve the frontend.
@@ -155,7 +163,6 @@ MySQL is a read-only ingest source, never a target.
 | `requirements.txt` (root) | Streamlit deployment, resolved from the repository root |
 | `web/requirements.txt` | Same set, for running `web/` on its own |
 | `.env` / `.env.example` | Runtime configuration, every value has a default |
-| `.python-version` | Pins 3.12 for the deployment builder |
 
 No Poetry, PDM, uv, Pipenv, or Conda. No lock file, which is what makes the
 deployment builder resolve with pip and `requirements.txt` rather than
