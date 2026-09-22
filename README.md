@@ -285,11 +285,11 @@ page removes those controls rather than showing dead ones.
 `python build_standalone.py site out.html` folds the whole thing into a single
 self-contained file.
 
-**Streamlit app on a host.** The repo carries a `Procfile` and a root
-`requirements.txt`, which is enough for Railway, Render or Fly to build and run
-it. Set `GEMINI_API_KEY` as a service variable. Nothing pins the Python version,
-so a builder picks its own default; set `RAILPACK_PYTHON_VERSION=3.12` on Railway,
-or the equivalent for your host, if a dependency has no wheel for that default.
+**Streamlit app on a host.** The repo carries a `Procfile`, a root
+`requirements.txt` and a `.python-version` pin, which is enough for Railway,
+Render or Fly to build and run it. Set `GEMINI_API_KEY` as a service variable.
+The pin is load-bearing: builders that default to a newer Python can fail
+outright when a dependency has no wheel for it yet.
 The container filesystem is usually ephemeral, so the app seeds a sample store on
 each cold start and review decisions reset with it; mount a volume at the data
 directory if they need to persist.
