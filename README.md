@@ -9,6 +9,9 @@ Built against the real dataset: 66 logged searches and 25,881 products with
 Arabic and English names. A generator ships alongside it so the project runs
 without that dump; generated data is labelled as such everywhere it appears.
 
+Requires Python 3.11 or newer. No database server, no Node toolchain, and no
+API key: the agent falls back to a local planner when no key is configured.
+
 ```bash
 pip install -e ".[dev]"
 searchiq sample-data    # generate a mock dataset and load it (~5s)
