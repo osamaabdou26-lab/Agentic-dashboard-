@@ -1,5 +1,8 @@
 # Search Pulse
 
+[![CI](https://github.com/osamaabdou26-lab/Agentic-dashboard-/actions/workflows/ci.yml/badge.svg)](https://github.com/osamaabdou26-lab/Agentic-dashboard-/actions/workflows/ci.yml)
+[![Python 3.12](https://img.shields.io/badge/python-3.12-blue)](.python-version)
+
 Search-quality intelligence for the Spinneys Egypt grocery catalogue. It surfaces
 failing searches, mines synonym and misspelling fixes for human review, and ships
 an agent that answers questions about search performance and writes a weekly
@@ -294,6 +297,22 @@ The container filesystem is usually ephemeral, so the app seeds a sample store o
 each cold start and review decisions reset with it; mount a volume at the data
 directory if they need to persist.
 
+**Docker (FastAPI dashboard + API).** The `Dockerfile` builds the `searchiq`
+package into a slim, non-root runtime image and runs `searchiq serve`. Same
+ephemeral-storage caveat as above: `docker-entrypoint.sh` seeds a sample store
+on first boot if `SEARCHIQ_DB` doesn't already point at one, so the container
+runs with zero configuration.
+
+```bash
+docker build -t search-pulse .
+docker run --rm -p 8000:8000 --env-file .env search-pulse
+```
+
+Mount a volume at `/app/data` to persist the analytics store (and review
+decisions) across restarts, or point `SEARCHIQ_DB` at a file on a mounted
+volume. `docker compose` works the same way with a single service plus a
+named volume.
+
 ## Configuration
 
 Copy `.env.example` to `.env`. Every value has a working default, so an empty
@@ -321,6 +340,9 @@ nothing model-shaped lives on disk.
 pytest tests/          # 289 tests, about ten seconds
 ruff check src tests
 ```
+
+CI (`.github/workflows/ci.yml`) runs both on every push and pull request against
+`main`, then builds the Docker image as a third check.
 
 No API key, no network, no database server. The suite never touches the 828 MB
 dump: it builds a small one reproducing the structural features that matter
