@@ -492,7 +492,8 @@ Never invent a number — every figure in your answer must come from the \
 snapshot below or from a tool result. When a query looks like a misspelling, \
 use check_catalogue_coverage or get_query_detail to tell a retrieval gap (the \
 catalogue stocks it, search missed it) from an assortment gap (nobody stocks \
-it). Cite concrete figures. Keep answers concise.
+it). Cite concrete figures. Keep answers concise: at most about 200 words, \
+the few figures that matter most, no long per-query breakdowns unless asked.
 
 Speed matters. The snapshot below already holds the whole-dataset headline \
 figures, so do not call get_search_health for those; call it only for a \
@@ -547,23 +548,51 @@ def _agent_config() -> types.GenerateContentConfig:
         system_instruction=_AGENT_SYSTEM_PROMPT.format(snapshot=_agent_snapshot()),
         tools=[_agent_tool()],
         thinking_config=_thinking_config(AGENT_THINKING_LEVEL),
+        # Output length is the other half of per-request latency; the
+        # answers asked for are short, so cap generation accordingly.
+        max_output_tokens=1500,
     )
 
 
-def _generate(client: genai.Client, contents: list[types.Content], config) -> types.GenerateContentResponse:
-    """One model request, retried in place when the model is merely busy.
+class TurnBudgetExceeded(RuntimeError):
+    """The whole agent turn ran out of time; answer locally instead."""
+
+
+# A whole turn — every model request and retry together — must finish inside
+# this budget, after which the local planner answers. Without it, a stalled
+# model cost 3 attempts × the full per-request timeout before any fallback.
+AGENT_TURN_BUDGET_S = float(os.environ.get("GEMINI_AGENT_BUDGET_S", "45"))
+# No single request may take longer than this, even with budget left.
+AGENT_REQUEST_TIMEOUT_S = float(os.environ.get("GEMINI_AGENT_REQUEST_TIMEOUT_S", "30"))
+_MIN_USEFUL_REQUEST_S = 3.0
+
+
+def _generate(
+    client: genai.Client,
+    contents: list[types.Content],
+    config: types.GenerateContentConfig,
+    deadline: float,
+) -> types.GenerateContentResponse:
+    """One model request, retried in place when busy, never past `deadline`.
 
     Retrying here, rather than restarting the whole turn, keeps the tool
     calls and model steps already completed in this turn.
     """
     delay = 1.0
     for attempt in range(3):
+        remaining = deadline - time.monotonic()
+        if remaining < _MIN_USEFUL_REQUEST_S:
+            raise TurnBudgetExceeded(f"turn budget of {AGENT_TURN_BUDGET_S:.0f}s used up")
+        timeout_ms = int(min(remaining, AGENT_REQUEST_TIMEOUT_S) * 1000)
+        request_config = config.model_copy(update={"http_options": types.HttpOptions(timeout=timeout_ms)})
         try:
-            return client.models.generate_content(model=GEMINI_MODEL, contents=contents, config=config)
+            return client.models.generate_content(model=GEMINI_MODEL, contents=contents, config=request_config)
         except Exception as exc:  # noqa: BLE001 - classified below
             if _is_quota(exc) or not _is_transient(exc) or attempt == 2:
                 raise
             log.warning("Gemini request attempt %d failed, retrying: %s", attempt + 1, exc)
+            if deadline - time.monotonic() < delay + _MIN_USEFUL_REQUEST_S:
+                raise TurnBudgetExceeded(f"turn budget of {AGENT_TURN_BUDGET_S:.0f}s used up") from exc
             time.sleep(delay)
             delay *= 2
     raise RuntimeError("unreachable")
@@ -587,12 +616,13 @@ def ask_agent(
     into the next turn.
     """
     config = _agent_config()
+    deadline = time.monotonic() + AGENT_TURN_BUDGET_S
     user_turn = types.Content(role="user", parts=[types.Part(text=question)])
     contents = _compact_history(history) + [user_turn]
     trace: list[dict[str, Any]] = []
 
     for step in range(max_iterations):
-        response = _generate(client, contents, config)
+        response = _generate(client, contents, config, deadline)
         if not response.candidates or response.candidates[0].content is None:
             raise RuntimeError("Gemini returned no candidate")
         content = response.candidates[0].content
@@ -678,6 +708,8 @@ def answer_question(
         log.warning("Agent turn failed: %s", exc)
         if _is_quota(exc):
             reason = "Gemini's daily quota is used up"
+        elif isinstance(exc, TurnBudgetExceeded):
+            reason = f"Gemini didn't answer within {AGENT_TURN_BUDGET_S:.0f}s"
         elif _is_transient(exc):
             reason = "Gemini stayed busy across three attempts"
         else:
