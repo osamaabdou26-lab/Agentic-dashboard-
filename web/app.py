@@ -11,6 +11,7 @@ Run with:  streamlit run app.py
 from __future__ import annotations
 
 import json
+import logging
 import os
 import sys
 import time
@@ -76,6 +77,15 @@ DB_PATH = PROJECT_ROOT / "data" / "searchiq.db"
 # Overridable from the environment so the next retirement is a .env edit rather
 # than a code change — `GEMINI_MODEL=gemini-3.7-flash` and restart.
 GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "").strip() or "gemini-3.6-flash"
+
+# One Gemini request must not be able to hold the page on "Thinking..." forever.
+# The SDK has no default deadline, so a stalled connection never returns.
+GEMINI_TIMEOUT_MS = int(os.environ.get("GEMINI_TIMEOUT_MS", "60000"))
+
+# Failures go to stdout so they appear in the host's deploy logs (Railway shows
+# stdout/stderr); the UI only ever shows a one-line reason.
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+log = logging.getLogger("search_pulse")
 
 # A fixed status palette, used consistently across every chart and badge in
 # this app: identity/verdict colour is never re-derived per chart.
@@ -190,8 +200,12 @@ def get_gemini_client() -> genai.Client | None:
     if not api_key:
         return None
     try:
-        return genai.Client(api_key=api_key)
+        return genai.Client(
+            api_key=api_key,
+            http_options=types.HttpOptions(timeout=GEMINI_TIMEOUT_MS),
+        )
     except Exception:
+        log.exception("Could not create the Gemini client")
         return None
 
 
@@ -380,18 +394,72 @@ JSON:
 """
 
 
-def gemini_digest_narrative(client: genai.Client, metrics: dict[str, Any]) -> str | None:
-    try:
-        payload = json.dumps(metrics, ensure_ascii=False, indent=2, default=str)
-        response = client.models.generate_content(
-            model=GEMINI_MODEL,
-            contents=_DIGEST_PROMPT.format(payload=payload),
-            config=types.GenerateContentConfig(temperature=0.3, max_output_tokens=400),
-        )
+def _thinking_config() -> types.ThinkingConfig | None:
+    """Keep reasoning short on Gemini 3.x, where it is on by default.
+
+    Older ids reject `thinking_level`, so only send it where it is understood.
+    """
+    if GEMINI_MODEL.startswith("gemini-3"):
+        return types.ThinkingConfig(thinking_level=types.ThinkingLevel.LOW)
+    return None
+
+
+def _is_transient(exc: Exception) -> bool:
+    text = str(exc)
+    return any(s in text for s in ("UNAVAILABLE", "503", "500", "INTERNAL", "DEADLINE", "timed out"))
+
+
+def _is_quota(exc: Exception) -> bool:
+    text = str(exc)
+    return "RESOURCE_EXHAUSTED" in text or "429" in text
+
+
+# Thinking models count their reasoning against max_output_tokens. The old cap
+# of 400 was spent entirely on thoughts, so every call finished with MAX_TOKENS
+# and no text part — `response.text` was None and the summary silently vanished.
+_DIGEST_MAX_OUTPUT_TOKENS = 4096
+
+
+def gemini_digest_narrative(
+    client: genai.Client, metrics: dict[str, Any]
+) -> tuple[str | None, str | None]:
+    """Return (summary, failure_reason). Exactly one of the two is set."""
+    payload = json.dumps(metrics, ensure_ascii=False, indent=2, default=str)
+    config = types.GenerateContentConfig(
+        temperature=0.3,
+        max_output_tokens=_DIGEST_MAX_OUTPUT_TOKENS,
+        thinking_config=_thinking_config(),
+    )
+    delay = 2.0
+    for attempt in range(3):
+        try:
+            response = client.models.generate_content(
+                model=GEMINI_MODEL,
+                contents=_DIGEST_PROMPT.format(payload=payload),
+                config=config,
+            )
+        except Exception as exc:  # noqa: BLE001 - classified below
+            log.warning("Digest summary attempt %d failed: %s", attempt + 1, exc)
+            if _is_quota(exc):
+                return None, "Gemini's quota is used up for now"
+            if _is_transient(exc) and attempt < 2:
+                time.sleep(delay)
+                delay *= 2
+                continue
+            return None, f"Gemini call failed: {str(exc)[:160]}"
+
         text = (response.text or "").strip()
-        return text or None
-    except Exception:
-        return None
+        if text:
+            return text, None
+
+        candidate = response.candidates[0] if response.candidates else None
+        finish = getattr(candidate, "finish_reason", None)
+        finish = getattr(finish, "name", finish)
+        feedback = getattr(response, "prompt_feedback", None)
+        log.warning("Digest summary came back empty: finish=%s feedback=%s", finish, feedback)
+        return None, f"Gemini returned no text (finish reason: {finish or 'unknown'})"
+
+    return None, "Gemini stayed busy across three attempts"
 
 
 # ── Gemini: the search-performance agent ────────────────────────────────
@@ -435,6 +503,7 @@ def ask_agent(
     config = types.GenerateContentConfig(
         system_instruction=_AGENT_SYSTEM_PROMPT,
         tools=[_build_agent_tool()],
+        thinking_config=_thinking_config(),
     )
     contents = list(history)
     contents.append(types.Content(role="user", parts=[types.Part(text=question)]))
@@ -519,16 +588,16 @@ def answer_question(
         try:
             return ask_agent(client, question, history)
         except Exception as exc:  # noqa: BLE001 - the reason decides what happens next
-            text = str(exc)
-            if "RESOURCE_EXHAUSTED" in text or "429" in text:
+            log.warning("Agent attempt %d failed: %s", attempt + 1, exc)
+            if _is_quota(exc):
                 # Quota is gone until it resets; retrying only wastes the wait.
                 answer, trace = _local_answer(question, "Gemini's daily quota is used up")
                 return answer, trace, history
-            if ("UNAVAILABLE" in text or "503" in text) and attempt < 2:
+            if _is_transient(exc) and attempt < 2:
                 time.sleep(delay)
                 delay *= 2
                 continue
-            answer, trace = _local_answer(question, f"Gemini could not be reached ({text[:80]})")
+            answer, trace = _local_answer(question, f"Gemini could not be reached ({str(exc)[:80]})")
             return answer, trace, history
     answer, trace = _local_answer(question, "Gemini stayed busy across three attempts")
     return answer, trace, history
@@ -862,9 +931,14 @@ elif page == "Weekly Digest":
         with st.spinner("Assembling the digest..."):
             with store_connect(DB_PATH) as conn:
                 digest = searchiq_generate_digest(conn, days=int(days), use_model=False, store=True)
-            ai_summary = gemini_digest_narrative(gemini_client, digest.metrics) if gemini_client else None
+            ai_summary, ai_failure = (
+                gemini_digest_narrative(gemini_client, digest.metrics)
+                if gemini_client
+                else (None, None)
+            )
         st.session_state["digest"] = digest
         st.session_state["digest_ai_summary"] = ai_summary
+        st.session_state["digest_ai_failure"] = ai_failure
 
     digest = st.session_state.get("digest")
     if digest is None:
@@ -877,7 +951,11 @@ elif page == "Weekly Digest":
         elif gemini_client is None:
             st.caption("Set `GEMINI_API_KEY` to also get an AI-written summary paragraph here.")
         else:
-            st.caption("Gemini did not return a summary for this digest; showing the computed report only.")
+            reason = st.session_state.get("digest_ai_failure") or "no reason given"
+            st.warning(
+                f"No AI summary this time — {reason}. The computed report below is complete.",
+                icon="⚠️",
+            )
 
         st.markdown(digest.body_md)
 
