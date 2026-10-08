@@ -394,14 +394,31 @@ JSON:
 """
 
 
-def _thinking_config() -> types.ThinkingConfig | None:
+_THINKING_LEVELS = {
+    "minimal": types.ThinkingLevel.MINIMAL,
+    "low": types.ThinkingLevel.LOW,
+    "medium": types.ThinkingLevel.MEDIUM,
+    "high": types.ThinkingLevel.HIGH,
+}
+
+
+def _thinking_config(level: str = "low") -> types.ThinkingConfig | None:
     """Keep reasoning short on Gemini 3.x, where it is on by default.
 
     Older ids reject `thinking_level`, so only send it where it is understood.
+    Pro models do not accept "minimal", so it degrades to "low" there.
     """
-    if GEMINI_MODEL.startswith("gemini-3"):
-        return types.ThinkingConfig(thinking_level=types.ThinkingLevel.LOW)
-    return None
+    if not GEMINI_MODEL.startswith("gemini-3"):
+        return None
+    level = level.strip().lower()
+    if level == "minimal" and "flash" not in GEMINI_MODEL:
+        level = "low"
+    return types.ThinkingConfig(thinking_level=_THINKING_LEVELS.get(level, types.ThinkingLevel.LOW))
+
+
+# Picking tools over pre-computed metrics needs very little reasoning, and every
+# thinking token is latency paid on each round trip of the loop.
+AGENT_THINKING_LEVEL = os.environ.get("GEMINI_AGENT_THINKING", "minimal")
 
 
 def _is_transient(exc: Exception) -> bool:
@@ -471,15 +488,30 @@ never returns zero results — a real failure usually shows up as WRONG results,
 not an empty page. Never call a query healthy just because it returned five \
 results; check what those results actually are.
 
-Answer only using the tools you are given, and never invent a number — every \
-figure in your answer must come from a tool result. When a query looks like a \
-misspelling, use check_catalogue_coverage or get_query_detail to tell a \
-retrieval gap (the catalogue stocks it, search missed it) from an assortment \
-gap (nobody stocks it). Cite concrete figures. Keep answers concise.\
+Never invent a number — every figure in your answer must come from the \
+snapshot below or from a tool result. When a query looks like a misspelling, \
+use check_catalogue_coverage or get_query_detail to tell a retrieval gap (the \
+catalogue stocks it, search missed it) from an assortment gap (nobody stocks \
+it). Cite concrete figures. Keep answers concise.
+
+Speed matters. The snapshot below already holds the whole-dataset headline \
+figures, so do not call get_search_health for those; call it only for a \
+specific date range. When an answer needs several tools, request them ALL in \
+the same step as parallel function calls instead of one per step, and do not \
+call the same tool twice with the same arguments.
+
+Current snapshot (whole dataset, as returned by get_search_health):
+{snapshot}\
 """
 
+# Older turns are carried forward as question + final answer only; the tool
+# transcripts behind them are dropped. Re-sending every past tool result made
+# each follow-up question slower than the last.
+_AGENT_HISTORY_TURNS = 6
 
-def _build_agent_tool() -> types.Tool:
+
+@st.cache_resource(show_spinner=False)
+def _agent_tool() -> types.Tool:
     return types.Tool(
         function_declarations=[
             types.FunctionDeclaration(
@@ -492,68 +524,122 @@ def _build_agent_tool() -> types.Tool:
     )
 
 
+@st.cache_data(ttl=30, show_spinner=False)
+def _agent_snapshot() -> str:
+    with store_connect(DB_PATH, read_only=True) as conn:
+        overview = searchiq_run_tool(conn, "get_search_health", {})
+    return json.dumps(overview, ensure_ascii=False, separators=(",", ":"), default=str)
+
+
+@st.cache_data(ttl=30, show_spinner=False)
+def _cached_tool(name: str, args_json: str) -> Any:
+    """Tool results are pure reads over the store; repeat calls are free.
+
+    Cleared together with every other cached read when a suggestion is
+    decided or the store is refreshed, so the agent never sees stale state.
+    """
+    with store_connect(DB_PATH, read_only=True) as conn:
+        return searchiq_run_tool(conn, name, json.loads(args_json))
+
+
+def _agent_config() -> types.GenerateContentConfig:
+    return types.GenerateContentConfig(
+        system_instruction=_AGENT_SYSTEM_PROMPT.format(snapshot=_agent_snapshot()),
+        tools=[_agent_tool()],
+        thinking_config=_thinking_config(AGENT_THINKING_LEVEL),
+    )
+
+
+def _generate(client: genai.Client, contents: list[types.Content], config) -> types.GenerateContentResponse:
+    """One model request, retried in place when the model is merely busy.
+
+    Retrying here, rather than restarting the whole turn, keeps the tool
+    calls and model steps already completed in this turn.
+    """
+    delay = 1.0
+    for attempt in range(3):
+        try:
+            return client.models.generate_content(model=GEMINI_MODEL, contents=contents, config=config)
+        except Exception as exc:  # noqa: BLE001 - classified below
+            if _is_quota(exc) or not _is_transient(exc) or attempt == 2:
+                raise
+            log.warning("Gemini request attempt %d failed, retrying: %s", attempt + 1, exc)
+            time.sleep(delay)
+            delay *= 2
+    raise RuntimeError("unreachable")
+
+
+def _compact_history(history: list[types.Content]) -> list[types.Content]:
+    return history[-2 * _AGENT_HISTORY_TURNS :]
+
+
 def ask_agent(
     client: genai.Client,
     question: str,
     history: list[types.Content],
     *,
     max_iterations: int = 6,
+    on_step=None,
 ) -> tuple[str, list[dict[str, Any]], list[types.Content]]:
-    """Run one turn of the tool-calling loop, reading through the real searchiq tools."""
-    config = types.GenerateContentConfig(
-        system_instruction=_AGENT_SYSTEM_PROMPT,
-        tools=[_build_agent_tool()],
-        thinking_config=_thinking_config(),
-    )
-    contents = list(history)
-    contents.append(types.Content(role="user", parts=[types.Part(text=question)]))
+    """Run one turn of the tool-calling loop, reading through the real searchiq tools.
+
+    Returns the answer, the tool trace, and the compacted history to carry
+    into the next turn.
+    """
+    config = _agent_config()
+    user_turn = types.Content(role="user", parts=[types.Part(text=question)])
+    contents = _compact_history(history) + [user_turn]
     trace: list[dict[str, Any]] = []
 
-    with store_connect(DB_PATH, read_only=True) as conn:
-        for _ in range(max_iterations):
-            response = client.models.generate_content(
-                model=GEMINI_MODEL, contents=contents, config=config
+    for step in range(max_iterations):
+        response = _generate(client, contents, config)
+        if not response.candidates or response.candidates[0].content is None:
+            raise RuntimeError("Gemini returned no candidate")
+        content = response.candidates[0].content
+        contents.append(content)
+        parts = content.parts or []
+
+        calls = [p.function_call for p in parts if p.function_call]
+        if not calls:
+            text = "".join(p.text or "" for p in parts if not p.thought)
+            answer = text.strip() or "(no answer)"
+            final = types.Content(role="model", parts=[types.Part(text=answer)])
+            return answer, trace, _compact_history(history + [user_turn, final])
+
+        if on_step:
+            on_step(step + 1, [fc.name for fc in calls])
+
+        response_parts = []
+        for fc in calls:
+            args = dict(fc.args or {})
+            result = _cached_tool(fc.name, json.dumps(args, sort_keys=True, ensure_ascii=False, default=str))
+            trace.append(
+                {
+                    "name": fc.name,
+                    "args": args,
+                    "result_preview": json.dumps(result, ensure_ascii=False, default=str)[:500],
+                }
             )
-            candidate = response.candidates[0]
-            contents.append(candidate.content)
-
-            calls = [p.function_call for p in candidate.content.parts if p.function_call]
-            if not calls:
-                text = "".join(p.text or "" for p in candidate.content.parts)
-                return text or "(no answer)", trace, contents
-
-            response_parts = []
-            for fc in calls:
-                args = dict(fc.args or {})
-                result = searchiq_run_tool(conn, fc.name, args)
-                trace.append(
-                    {
-                        "name": fc.name,
-                        "args": args,
-                        "result_preview": json.dumps(result, ensure_ascii=False, default=str)[:500],
-                    }
-                )
-                response_parts.append(
-                    types.Part(
-                        function_response=types.FunctionResponse(
-                            id=fc.id, name=fc.name, response={"result": result}
-                        )
+            response_parts.append(
+                types.Part(
+                    function_response=types.FunctionResponse(
+                        id=fc.id, name=fc.name, response={"result": result}
                     )
                 )
-            contents.append(types.Content(role="user", parts=response_parts))
+            )
+        contents.append(types.Content(role="user", parts=response_parts))
 
     return (
         "I couldn't settle on an answer within the tool-call budget — try a narrower question.",
         trace,
-        contents,
+        _compact_history(history),
     )
 
 
 # ── Answering when Gemini will not ───────────────────────────────────────
-# Two failures are routine rather than exceptional on the free tier, and one
-# tool-calling turn costs two or three requests, so a short demo can reach
-# them: 503 when the model is busy, 429 when the day's quota is gone. Showing
-# a raw API error in the chat makes a working system look broken.
+# Two failures are routine rather than exceptional on the free tier: 503 when
+# the model is busy, 429 when the day's quota is gone. Showing a raw API error
+# in the chat makes a working system look broken.
 #
 # searchiq answers without any model at all — `_ask_deterministic` routes the
 # question to the same tools and renders the result. It is a private name
@@ -580,27 +666,24 @@ def _local_answer(question: str, reason: str) -> tuple[str, list[dict[str, Any]]
 
 
 def answer_question(
-    client: genai.Client, question: str, history: list[types.Content]
+    client: genai.Client, question: str, history: list[types.Content], *, on_step=None
 ) -> tuple[str, list[dict[str, Any]], list[types.Content]]:
-    """Ask Gemini, retrying a busy model and falling back when it will not answer."""
-    delay = 2.0
-    for attempt in range(3):
-        try:
-            return ask_agent(client, question, history)
-        except Exception as exc:  # noqa: BLE001 - the reason decides what happens next
-            log.warning("Agent attempt %d failed: %s", attempt + 1, exc)
-            if _is_quota(exc):
-                # Quota is gone until it resets; retrying only wastes the wait.
-                answer, trace = _local_answer(question, "Gemini's daily quota is used up")
-                return answer, trace, history
-            if _is_transient(exc) and attempt < 2:
-                time.sleep(delay)
-                delay *= 2
-                continue
-            answer, trace = _local_answer(question, f"Gemini could not be reached ({str(exc)[:80]})")
-            return answer, trace, history
-    answer, trace = _local_answer(question, "Gemini stayed busy across three attempts")
-    return answer, trace, history
+    """Ask Gemini, falling back to the local planner when it will not answer.
+
+    Busy-model retries happen per request inside `_generate`.
+    """
+    try:
+        return ask_agent(client, question, history, on_step=on_step)
+    except Exception as exc:  # noqa: BLE001 - the reason decides the message
+        log.warning("Agent turn failed: %s", exc)
+        if _is_quota(exc):
+            reason = "Gemini's daily quota is used up"
+        elif _is_transient(exc):
+            reason = "Gemini stayed busy across three attempts"
+        else:
+            reason = f"Gemini could not be reached ({str(exc)[:80]})"
+        answer, trace = _local_answer(question, reason)
+        return answer, trace, history
 
 
 # ── Sidebar ──────────────────────────────────────────────────────────────
@@ -1007,9 +1090,17 @@ elif page == "Ask the Agent":
         with st.chat_message("user"):
             st.markdown(prompt)
         with st.chat_message("assistant"):
-            with st.spinner("Thinking..."):
+            started = time.perf_counter()
+            with st.status("Thinking…", expanded=False) as status:
+
+                def _on_step(step: int, names: list[str]) -> None:
+                    status.update(label=f"Step {step}: running {', '.join(names)}…")
+
                 answer, trace, new_contents = answer_question(
-                    gemini_client, prompt, st.session_state.chat_contents
+                    gemini_client, prompt, st.session_state.chat_contents, on_step=_on_step
+                )
+                status.update(
+                    label=f"Answered in {time.perf_counter() - started:.1f}s", state="complete"
                 )
             st.markdown(answer)
             if trace:
